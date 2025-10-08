@@ -4,6 +4,7 @@ from pathlib import Path
 import argparse
 import asyncio
 import tempfile
+from urllib.parse import urlparse
 
 from .http_dl import download_http
 from .utils import fetch_text, concat_ts, remux_to_mp4
@@ -16,6 +17,46 @@ from .hls import (
 )
 
 import aiohttp
+
+DEFAULT_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chromium/124.0.0.0 Safari/537.36"
+)
+
+
+def derive_output_from_url(url: str, downloads_dir: Path) -> Path:
+    """Derive a nested output path mirroring the URL: domain/path/file.mp4.
+
+    Examples:
+      https://111movies.com/tv/48866/1/10 -> downloads/111movies.com/tv/48866/1/10.mp4
+    """
+    try:
+        u = urlparse(url)
+        netloc = u.netloc or "unknown-host"
+
+        def sanitize(s: str) -> str:
+            s2 = "".join(c for c in s if c.isalnum() or c in ("-", "_", "."))
+            return (s2 or "_")[:64]
+
+        base = downloads_dir / sanitize(netloc)
+        # split and sanitize path segments
+        segs = [sanitize(seg) for seg in (u.path or "").split("/") if seg]
+        if not segs:
+            segs = ["video"]
+        # last segment becomes filename stem; strip playlist extensions if present
+        stem = segs[-1]
+        lower = stem.lower()
+        if lower.endswith(".m3u8"):
+            stem = stem[:-5]
+        elif lower.endswith(".mp4"):
+            stem = stem[:-4]
+        elif lower.endswith(".ts"):
+            stem = stem[:-3]
+        # directory is all but last
+        nested_dir = base.joinpath(*segs[:-1]) if len(segs) > 1 else base
+        return nested_dir / f"{stem}.mp4"
+    except Exception:
+        return downloads_dir / sanitize("output") / "video.mp4"
 
 
 async def download_hls(url: str, out_path: Path, res_text: str, bw: int, ua: str, ref: str, cookies: str, conc: int, remux: bool):
@@ -93,12 +134,12 @@ def build_argparser():
     p.add_argument("--url", required=True, help="Source URL (direct media or .m3u8)")
     p.add_argument("--out", default=str(Path.cwd() / "downloads" / "output.mp4"), help="Output file path")
     p.add_argument("--mode", choices=["auto", "http", "hls"], default="auto", help="Download mode")
-    p.add_argument("--ua", help="User-Agent header")
+    p.add_argument("--ua", default=DEFAULT_UA, help="User-Agent header")
     p.add_argument("--ref", help="Referer header")
     p.add_argument("--cookies", help="Cookie header string")
     p.add_argument("--res", help="Preferred resolution for HLS, e.g., 1920x1080")
     p.add_argument("--bw", type=int, help="Preferred bandwidth for HLS in bps")
-    p.add_argument("--conc", type=int, default=8, help="HLS segment concurrency")
+    p.add_argument("--conc", type=int, default=4, help="HLS segment concurrency")
     p.add_argument("--no-remux", action="store_true", help="Do not remux HLS to MP4 (keep .ts)")
     return p
 
@@ -115,13 +156,32 @@ def decide_mode(url: str, mode_arg: str):
 def main():
     args = build_argparser().parse_args()
     url = args.url
+    default_out = Path.cwd() / "downloads" / "output.mp4"
     out_path = Path(args.out)
+    if out_path == default_out:
+        out_path = derive_output_from_url(url, default_out.parent)
     mode = decide_mode(url, args.mode)
     headers = {}
     if args.ua:
         headers["User-Agent"] = args.ua
     if args.ref:
         headers["Referer"] = args.ref
+        try:
+            ro = urlparse(args.ref)
+            origin = f"{ro.scheme}://{ro.netloc}" if ro.scheme and ro.netloc else None
+        except Exception:
+            origin = None
+    else:
+        try:
+            uo = urlparse(url)
+            origin = f"{uo.scheme}://{uo.netloc}" if uo.scheme and uo.netloc else None
+        except Exception:
+            origin = None
+    if origin:
+        headers["Origin"] = origin
+    headers.setdefault("Accept", "*/*")
+    headers.setdefault("Accept-Language", "en-US,en;q=0.9")
+    headers.setdefault("Accept-Encoding", "gzip, deflate, br")
     if args.cookies:
         headers["Cookie"] = args.cookies
 

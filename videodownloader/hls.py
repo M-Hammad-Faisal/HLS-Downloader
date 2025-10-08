@@ -1,7 +1,7 @@
 import re
 import asyncio
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 
@@ -35,6 +35,36 @@ class Segment:
         self.seq = seq
 
 
+def normalize_uri(base_url: str, uri: str) -> str:
+    """
+    Make a playlist URI absolute.
+
+    Handles:
+    - Absolute URLs: return as-is
+    - Scheme-less URLs: //host/path → scheme from base
+    - Relative paths: use urljoin(base, path)
+    - Paths that embed a hostname: /host.tld/… → scheme://host.tld/…
+    """
+    if not uri:
+        return uri
+    u = uri.strip()
+    # Already absolute
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+    # Scheme-less
+    if u.startswith("//"):
+        base = urlparse(base_url)
+        return f"{base.scheme}:{u}"
+    # Site-relative path
+    if u.startswith("/"):
+        # Prefer joining to base_url to preserve proxy-style paths (e.g., *.workers.dev)
+        # If a path embeds a hostname like /example.com/..., proxies often rely on path rewriting.
+        # Joining to base_url keeps requests going through the proxy.
+        return urljoin(base_url, u)
+    # Default relative resolution
+    return urljoin(base_url, u)
+
+
 def parse_resolution(s: str):
     m = re.match(r"^\s*(\d+)\s*x\s*(\d+)\s*$", s or "")
     if not m:
@@ -63,7 +93,7 @@ def parse_master_playlist(text: str, base_url: str):
                         resolution = (int(w), int(h))
                     except:
                         pass
-                variants.append(Variant(urljoin(base_url, line), bandwidth, resolution))
+                variants.append(Variant(normalize_uri(base_url, line), bandwidth, resolution))
                 attrs = {}
     return variants
 
@@ -95,11 +125,17 @@ def parse_media_playlist(text: str, base_url: str):
             m_uri = uri_re.search(line)
             m_iv = iv_re.search(line)
             method = m_method.group(1) if m_method else "NONE"
-            uri = urljoin(base_url, m_uri.group(1)) if m_uri else None
+            uri = normalize_uri(base_url, m_uri.group(1)) if m_uri else None
             iv = bytes.fromhex(m_iv.group(1)) if m_iv else None
             key = KeyInfo(method, uri, iv)
         elif line and not line.startswith("#"):
-            seg_url = urljoin(base_url, line)
+            seg_url = normalize_uri(base_url, line)
+            # Filter out obvious non-media entries to avoid 403/length errors
+            lower = seg_url.lower()
+            non_media_exts = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico", ".css", ".js", ".html", ".txt")
+            is_media = (lower.endswith(".ts") or lower.endswith(".m4s") or lower.endswith(".mp4") or ".ts?" in lower or ".m4s?" in lower or ".mp4?" in lower)
+            if not is_media and any(lower.endswith(ext) for ext in non_media_exts):
+                continue
             segments.append(Segment(seg_url, duration=current_dur, key=key, seq=seq))
             seq += 1
             current_dur = None
