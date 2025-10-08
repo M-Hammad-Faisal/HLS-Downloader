@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# macOS
+.DS_Store
+
+# Virtual env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Build/Dist
+build/
+dist/
+
+# Local env/config  
+.env
+*.local
+
+# Outputs
+output.mp4
+*.mp4
+*.ts
