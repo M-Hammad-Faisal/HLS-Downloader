@@ -108,7 +108,7 @@ def capture_media(
                 or ".ts?" in u
             )
 
-        def on_request(req):
+        def on_request(req, page_ref=None):
             url = req.url
             if looks_like_media(url):
                 if verbose:
@@ -131,6 +131,13 @@ def capture_media(
                     rtype = getattr(req, "resource_type", None)
                 except Exception:
                     rtype = None
+                frame_url = None
+                try:
+                    frame = getattr(req, "frame", None)
+                    if frame:
+                        frame_url = getattr(frame, "url", None)
+                except Exception:
+                    frame_url = None
                 found.append({
                     "url": url,
                     "kind": "request",
@@ -138,9 +145,11 @@ def capture_media(
                     "body": None,
                     "headers": req_headers,
                     "resource_type": rtype,
+                    "page_url": getattr(page_ref, "url", None) if page_ref else page_url,
+                    "frame_url": frame_url,
                 })
 
-        def on_response(resp):
+        def on_response(resp, page_ref=None):
             url = resp.url
             ct = (resp.headers.get("content-type") or "").lower()
             hit = (
@@ -174,10 +183,35 @@ def capture_media(
                     "content_type": ct or None,
                     "body": body,
                     "headers": resp_headers,
+                    "page_url": getattr(page_ref, "url", None) if page_ref else page_url,
                 })
 
-        page.on("request", on_request)
-        page.on("response", on_response)
+        def attach_listeners(p):
+            p.on("request", lambda req: on_request(req, page_ref=p))
+            p.on("response", lambda resp: on_response(resp, page_ref=p))
+
+        attach_listeners(page)
+
+        def on_new_page(p):
+            attach_listeners(p)
+            # Try to kick playback in the new page as well
+            try:
+                p.click("video", timeout=2000, force=True)
+            except Exception:
+                pass
+            try:
+                p.evaluate(
+                    """
+                    (() => {
+                      const vids = Array.from(document.querySelectorAll('video'));
+                      vids.forEach(v => { try { v.muted = true; v.autoplay = true; v.click(); const pr = v.play && v.play(); if (pr && pr.catch) pr.catch(()=>{}); } catch(e){} });
+                    })();
+                    """
+                )
+            except Exception:
+                pass
+
+        context.on("page", on_new_page)
 
         page.goto(page_url, wait_until="domcontentloaded")
         # Try to kick off playback to trigger HLS requests

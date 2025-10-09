@@ -382,8 +382,39 @@ class MainWindow(QtWidgets.QWidget):
         self.log.clear()
         self._append(f"Queued: {url}\nSaving to: {out_path}")
 
-        # Default referer to page URL if not provided
-        ref = self.ref_in.text().strip() or self.page_in.text().strip()
+        # Default referer to best captured page/frame URL if not provided
+        ref = self.ref_in.text().strip()
+        if not ref:
+            try:
+                target_host = urllib.parse.urlparse(url).netloc
+            except Exception:
+                target_host = None
+            # Prefer exact match to selected URL
+            for it in getattr(self, "captured_items", []) or []:
+                if it.get("kind") != "request":
+                    continue
+                ureq = it.get("url") or ""
+                if ureq == url:
+                    hdrs = it.get("headers") or {}
+                    ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                    if ref:
+                        break
+            # Else any request on same host
+            if not ref and target_host:
+                for it in getattr(self, "captured_items", []) or []:
+                    if it.get("kind") != "request":
+                        continue
+                    try:
+                        host = urllib.parse.urlparse(it.get("url") or "").netloc
+                    except Exception:
+                        host = None
+                    if host and host == target_host:
+                        hdrs = it.get("headers") or {}
+                        ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                        if ref:
+                            break
+        # Fallback to page URL if still empty
+        ref = ref or self.page_in.text().strip()
         ua = self.ua_in.text().strip() or DEFAULT_UA
         # Infer resource type from capture for better headers
         rtype = None
@@ -606,9 +637,26 @@ class MainWindow(QtWidgets.QWidget):
             for it in getattr(self, "captured_items", []) or []:
                 if it.get("kind") == "request" and (it.get("url") or "") == chosen_uri:
                     hdrs = it.get("headers") or {}
-                    cap_ref = hdrs.get("referer") or hdrs.get("Referer") or None
+                    cap_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
                     if cap_ref:
                         break
+            if not cap_ref:
+                try:
+                    target_host = urllib.parse.urlparse(chosen_uri).netloc
+                except Exception:
+                    target_host = None
+                for it in getattr(self, "captured_items", []) or []:
+                    if it.get("kind") != "request":
+                        continue
+                    try:
+                        host = urllib.parse.urlparse(it.get("url") or "").netloc
+                    except Exception:
+                        host = None
+                    if host and target_host and host == target_host:
+                        hdrs = it.get("headers") or {}
+                        cap_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                        if cap_ref:
+                            break
             if cap_ref:
                 self.ref_in.setText(cap_ref)
         except Exception:
