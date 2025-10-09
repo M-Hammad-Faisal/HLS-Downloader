@@ -75,6 +75,8 @@ def capture_media(
     cookie_header is a synthesized "Cookie" header from the browser context.
     """
     found: List[dict] = []
+    # Track media activity per page to decide closing pop-ups
+    page_media_counts: Dict[object, int] = {}
     # Prepare effective headers
     eff_headers = dict(headers or {})
     eff_headers.setdefault("User-Agent", DEFAULT_UA)
@@ -148,6 +150,11 @@ def capture_media(
                     "page_url": getattr(page_ref, "url", None) if page_ref else page_url,
                     "frame_url": frame_url,
                 })
+                try:
+                    if page_ref is not None:
+                        page_media_counts[page_ref] = page_media_counts.get(page_ref, 0) + 1
+                except Exception:
+                    pass
 
         def on_response(resp, page_ref=None):
             url = resp.url
@@ -185,8 +192,18 @@ def capture_media(
                     "headers": resp_headers,
                     "page_url": getattr(page_ref, "url", None) if page_ref else page_url,
                 })
+                try:
+                    if page_ref is not None:
+                        page_media_counts[page_ref] = page_media_counts.get(page_ref, 0) + 1
+                except Exception:
+                    pass
 
         def attach_listeners(p):
+            # Initialize media counter
+            try:
+                page_media_counts.setdefault(p, 0)
+            except Exception:
+                pass
             p.on("request", lambda req: on_request(req, page_ref=p))
             p.on("response", lambda resp: on_response(resp, page_ref=p))
 
@@ -208,6 +225,20 @@ def capture_media(
                     })();
                     """
                 )
+            except Exception:
+                pass
+            # If this pop-up/new tab does not produce media quickly, close it and refocus main page
+            try:
+                p.wait_for_timeout(1500)
+            except Exception:
+                pass
+            try:
+                if page_media_counts.get(p, 0) == 0:
+                    p.close()
+                    try:
+                        page.bring_to_front()
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -256,6 +287,11 @@ def capture_media(
                 page.keyboard.press("Space")
             except Exception:
                 pass
+        except Exception:
+            pass
+        # Ensure the main page is front-most after any pop-ups
+        try:
+            page.bring_to_front()
         except Exception:
             pass
 

@@ -274,6 +274,20 @@ class MainWindow(QtWidgets.QWidget):
         self.capture_list.setMinimumHeight(100)
         capL.addWidget(self.capture_list)
 
+        # Actions for captured items
+        row_copy = QtWidgets.QHBoxLayout()
+        self.btn_copy_selected = QtWidgets.QPushButton("Copy selected URL")
+        self.btn_copy_selected.setEnabled(True)
+        self.btn_copy_selected.clicked.connect(self._copy_selected_url)
+        row_copy.addWidget(self.btn_copy_selected)
+        capL.addLayout(row_copy)
+
+        # Double-click captured item to copy URL
+        try:
+            self.capture_list.itemDoubleClicked.connect(lambda _: self._copy_selected_url())
+        except Exception:
+            pass
+
         row_var = QtWidgets.QHBoxLayout()
         row_var.addWidget(QtWidgets.QLabel("Available resolutions:"))
         self.variant_combo = QtWidgets.QComboBox()
@@ -327,6 +341,21 @@ class MainWindow(QtWidgets.QWidget):
         f, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save As", str(self.out_in.text()))
         if f:
             self.out_in.setText(f)
+
+    def _copy_selected_url(self):
+        try:
+            idx = self.capture_list.currentRow()
+            if idx < 0 or idx >= len(self.captured_items):
+                QtWidgets.QMessageBox.information(self, "Copy URL", "Select an item in the capture list first.")
+                return
+            url = self.captured_items[idx].get("url") or ""
+            if not url:
+                QtWidgets.QMessageBox.information(self, "Copy URL", "Selected item has no URL.")
+                return
+            QtWidgets.QApplication.clipboard().setText(url)
+            self.status.setText("Copied URL to clipboard")
+        except Exception:
+            QtWidgets.QMessageBox.information(self, "Copy URL", "Could not copy the selected URL.")
 
     def _derive_nested_output(self, url: str) -> Path:
         """Derive downloads/<domain>/<path>/<file>.mp4 from the given URL."""
