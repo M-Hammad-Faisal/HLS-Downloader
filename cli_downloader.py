@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Launcher for the modular CLI downloader
+"""Launcher for the modular CLI downloader."""
 
 from videodownloader.cli import main
 

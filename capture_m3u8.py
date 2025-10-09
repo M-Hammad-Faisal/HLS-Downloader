@@ -23,6 +23,12 @@ DEFAULT_UA = (
 
 
 def build_argparser():
+    """
+    Build and configure the argument parser for the capture CLI.
+    
+    Returns:
+        argparse.ArgumentParser: Configured argument parser with all CLI options.
+    """
     p = argparse.ArgumentParser(description="Capture .m3u8 URLs from a web page")
     p.add_argument("--page", required=True, help="Page URL to open")
     p.add_argument("--ua", help="User-Agent header for requests")
@@ -39,6 +45,12 @@ def build_argparser():
 
 
 def main():
+    """
+    Main entry point for the capture CLI application.
+    
+    Parses command line arguments, captures media URLs from a web page,
+    and optionally downloads the first captured M3U8 stream.
+    """
     args = build_argparser().parse_args()
     headers = {}
     headers["User-Agent"] = args.ua or DEFAULT_UA
@@ -80,7 +92,6 @@ def main():
             print("       ", snippet, "…")
 
     if args.download:
-        # choose first .m3u8 among captured items
         first = None
         for it in items:
             u = it["url"].lower()
@@ -108,7 +119,6 @@ def main():
         if args.cookies:
             cmd += ["--cookies", args.cookies]
         elif cookie_header:
-            # if user didn't pass cookies explicitly, reuse captured session cookies
             cmd += ["--cookies", cookie_header]
 
         print("Running:", " ".join(cmd))

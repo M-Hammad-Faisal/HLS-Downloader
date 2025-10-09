@@ -31,12 +31,29 @@ SETTINGS_PATH = Path.cwd() / "hls_gui_settings.ini"
 
 
 class HlsWorker(QtCore.QThread):
+    """Worker thread for downloading HLS streams with progress tracking and cancellation support."""
+    
     log = QtCore.pyqtSignal(str)
     percent = QtCore.pyqtSignal(int)
     finished_ok = QtCore.pyqtSignal(str)
     finished_err = QtCore.pyqtSignal(str)
 
     def __init__(self, url, out_path, res_text, bw, ua, ref, cookies, conc, remux, resource_type_hint=None, auth_hint=None):
+        """Initialize the HLS worker with download parameters.
+        
+        Args:
+            url: HLS playlist URL to download
+            out_path: Output file path
+            res_text: Desired resolution as text (e.g., "1920x1080")
+            bw: Maximum bandwidth preference
+            ua: User-Agent header value
+            ref: Referer header value
+            cookies: Cookie header value
+            conc: Number of concurrent downloads
+            remux: Whether to remux to MP4 format
+            resource_type_hint: Hint about the resource type for headers
+            auth_hint: Authorization header value
+        """
         super().__init__()
         self.url = url
         self.out_path = Path(out_path)
@@ -52,6 +69,7 @@ class HlsWorker(QtCore.QThread):
         self.cancel_flag = asyncio.Event()
 
     def cancel(self):
+        """Request cancellation of the download operation."""
         self.log.emit("Cancel requested.")
         loop = getattr(self, "_loop", None)
         if loop:
@@ -60,12 +78,14 @@ class HlsWorker(QtCore.QThread):
             self.cancel_flag.set()
 
     def run(self):
+        """Run the HLS download operation in the worker thread."""
         try:
             asyncio.run(self._amain())
         except Exception as e:
             self.finished_err.emit(str(e))
 
     async def _amain(self):
+        """Main async download logic for HLS streams."""
         headers = {}
         headers["User-Agent"] = self.ua or DEFAULT_UA
         if self.ref:
@@ -177,10 +197,20 @@ class HlsWorker(QtCore.QThread):
 
 
 class CaptureWorker(QtCore.QThread):
+    """Worker thread for capturing media URLs from web pages using Playwright."""
+    
     captured = QtCore.pyqtSignal(list, str)
     error = QtCore.pyqtSignal(str)
 
     def __init__(self, page_url: str, headers: dict, headless: bool, timeout_seconds: int = 30):
+        """Initialize the capture worker with page parameters.
+        
+        Args:
+            page_url: URL of the web page to capture from
+            headers: HTTP headers to use when loading the page
+            headless: Whether to run browser in headless mode
+            timeout_seconds: Maximum time to wait for media capture
+        """
         super().__init__()
         self.page_url = page_url
         self.headers = headers or {}
@@ -188,6 +218,7 @@ class CaptureWorker(QtCore.QThread):
         self.timeout_seconds = int(timeout_seconds)
 
     def run(self):
+        """Run the media capture operation in the worker thread."""
         try:
             items, cookie_header = capture_media(
                 self.page_url,
@@ -203,7 +234,10 @@ class CaptureWorker(QtCore.QThread):
 
 
 class MainWindow(QtWidgets.QWidget):
+    """Main GUI window for the HLS downloader application."""
+    
     def __init__(self):
+        """Initialize the main window with UI components and settings."""
         super().__init__()
         self.setWindowTitle("HLS Downloader (Legal Streams Only)")
         self.resize(860, 560)
@@ -216,6 +250,7 @@ class MainWindow(QtWidgets.QWidget):
         self._load_settings()
 
     def _build_ui(self):
+        """Build and layout the main user interface components."""
         L = QtWidgets.QVBoxLayout(self)
 
         row_url = QtWidgets.QHBoxLayout()
@@ -354,11 +389,13 @@ class MainWindow(QtWidgets.QWidget):
         L.addWidget(self.remember_cb)
 
     def _choose_output(self):
+        """Open file dialog to select output file path."""
         f, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save As", str(self.out_in.text()))
         if f:
             self.out_in.setText(f)
 
     def _copy_selected_url(self):
+        """Copy the selected captured URL to the main URL input field."""
         try:
             idx = self.capture_list.currentRow()
             if idx < 0 or idx >= len(self.captured_items):
@@ -374,7 +411,7 @@ class MainWindow(QtWidgets.QWidget):
             QtWidgets.QMessageBox.information(self, "Copy URL", "Could not copy the selected URL.")
 
     def _apply_captured_headers(self):
-        """Apply headers from the selected captured request to the input fields."""
+        """Apply headers from the selected captured request to input fields."""
         try:
             idx = self.capture_list.currentRow()
             if idx < 0 or idx >= len(self.captured_items):
@@ -416,7 +453,14 @@ class MainWindow(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Apply Headers", f"Could not apply headers: {e}")
 
     def _derive_nested_output(self, url: str) -> Path:
-        """Derive downloads/<domain>/<path>/<file>.mp4 from the given URL."""
+        """Generate a nested output path based on the URL structure.
+        
+        Args:
+            url: The URL to derive the output path from
+            
+        Returns:
+            Path: The derived output file path
+        """
         try:
             u = urllib.parse.urlparse(url)
             netloc = u.netloc or "unknown-host"
@@ -441,6 +485,7 @@ class MainWindow(QtWidgets.QWidget):
             return Path.cwd() / "downloads" / "output.mp4"
 
     def _start(self):
+        """Start the HLS download process with current settings."""
         url = self.url_in.text().strip()
         if not url:
             QtWidgets.QMessageBox.warning(self, "Missing URL", "Capture a page and select a resolution to fill the variant URL.")
@@ -560,10 +605,12 @@ class MainWindow(QtWidgets.QWidget):
         self.worker.start()
 
     def _cancel(self):
+        """Cancel the currently running download operation."""
         if self.worker:
             self.worker.cancel()
 
     def _start_capture(self):
+        """Start capturing media URLs from the specified web page."""
         page_url = self.page_in.text().strip()
         if not page_url:
             QtWidgets.QMessageBox.warning(self, "Missing Page URL", "Enter a page URL to open and capture.")
@@ -597,6 +644,12 @@ class MainWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(list, str)
     def _on_captured(self, items, cookie_header):
+        """Handle captured media items and populate the capture list.
+        
+        Args:
+            items: List of captured media items
+            cookie_header: Cookie header value from the capture
+        """
         self.status.setText("Captured")
         self.btn_capture.setEnabled(True)
         
@@ -798,11 +851,17 @@ class MainWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str)
     def _on_capture_err(self, msg):
+        """Handle capture operation errors.
+        
+        Args:
+            msg: Error message from the capture operation
+        """
         self.status.setText("Capture error")
         self._append(f"❌ Capture error: {msg}")
         self.btn_capture.setEnabled(True)
 
     def _use_selected_variant(self):
+        """Use the selected variant from the capture list as the main URL."""
         idx = self.variant_combo.currentIndex()
         if idx < 0 or idx >= len(self.variant_uris):
             QtWidgets.QMessageBox.warning(self, "No selection", "Please select a resolution from the list.")
@@ -856,10 +915,12 @@ class MainWindow(QtWidgets.QWidget):
         self._append(f"Selected variant URL set: {chosen_uri}")
 
     def _download_selected(self):
+        """Download the selected variant from the capture list."""
         self._use_selected_variant()
         self._start()
 
     def _load_settings(self):
+        """Load application settings from the configuration file."""
         s = QtCore.QSettings(str(SETTINGS_PATH), QtCore.QSettings.IniFormat)
         self.url_in.setText(s.value("url", ""))
         self.out_in.setText(s.value("out", str(Path.cwd() / "downloads" / "output.mp4")))
@@ -875,6 +936,11 @@ class MainWindow(QtWidgets.QWidget):
         self.remember_cb.setChecked(bool(s.value("remember", True, type=bool)))
 
     def closeEvent(self, e):
+        """Handle window close event and save settings.
+        
+        Args:
+            e: The close event
+        """
         if self.remember_cb.isChecked():
             s = QtCore.QSettings(str(SETTINGS_PATH), QtCore.QSettings.IniFormat)
             s.setValue("url", self.url_in.text())
@@ -892,16 +958,31 @@ class MainWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str)
     def _append(self, s: str):
+        """Append text to the log display.
+        
+        Args:
+            s: Text to append to the log
+        """
         self.log.append(s)
         self.log.ensureCursorVisible()
 
     @QtCore.pyqtSlot(int)
     def _on_percent(self, p: int):
+        """Update the download progress bar.
+        
+        Args:
+            p: Progress percentage (0-100)
+        """
         self.pbar.setValue(p)
         self.status.setText(f"Downloading — {p}%")
 
     @QtCore.pyqtSlot(str)
     def _on_ok(self, path: str):
+        """Handle successful download completion.
+        
+        Args:
+            path: Path to the downloaded file
+        """
         self._append(f"✅ Saved: {path}")
         self.status.setText("Completed")
         self.btn_start.setEnabled(True)
@@ -910,6 +991,11 @@ class MainWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str)
     def _on_err(self, msg: str):
+        """Handle download error.
+        
+        Args:
+            msg: Error message
+        """
         self._append(f"❌ Error: {msg}")
         self.status.setText("Error")
         self.btn_start.setEnabled(True)
@@ -917,6 +1003,7 @@ class MainWindow(QtWidgets.QWidget):
 
 
 def main():
+    """Main entry point for the GUI application."""
     app = QtWidgets.QApplication(sys.argv)
     w = MainWindow()
     w.show()

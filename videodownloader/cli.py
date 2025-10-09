@@ -60,6 +60,20 @@ def derive_output_from_url(url: str, downloads_dir: Path) -> Path:
 
 
 async def download_hls(url: str, out_path: Path, res_text: str, bw: int, ua: str, ref: str, cookies: str, conc: int, remux: bool):
+    """
+    Download an HLS stream to a local file.
+    
+    Args:
+        url: The M3U8 playlist URL to download.
+        out_path: Output file path for the downloaded video.
+        res_text: Preferred resolution string (e.g., "1920x1080").
+        bw: Preferred bandwidth in bits per second.
+        ua: User-Agent header value.
+        ref: Referer header value.
+        cookies: Cookie header string.
+        conc: Number of concurrent segment downloads.
+        remux: Whether to remux the final output to MP4.
+    """
     headers = {}
     if ua:
         headers["User-Agent"] = ua
@@ -130,6 +144,12 @@ async def download_hls(url: str, out_path: Path, res_text: str, bw: int, ua: str
 
 
 def build_argparser():
+    """
+    Build and configure the argument parser for the CLI downloader.
+    
+    Returns:
+        argparse.ArgumentParser: Configured argument parser with all CLI options.
+    """
     p = argparse.ArgumentParser(description="Authorized Video Downloader (HTTP/HLS)")
     p.add_argument("--url", required=True, help="Source URL (direct media or .m3u8)")
     p.add_argument("--out", default=str(Path.cwd() / "downloads" / "output.mp4"), help="Output file path")
@@ -145,6 +165,16 @@ def build_argparser():
 
 
 def decide_mode(url: str, mode_arg: str):
+    """
+    Determine the download mode based on URL and user preference.
+    
+    Args:
+        url: The source URL to analyze.
+        mode_arg: User-specified mode ("auto", "http", or "hls").
+        
+    Returns:
+        str: The determined download mode ("http" or "hls").
+    """
     if mode_arg != "auto":
         return mode_arg
     u = url.lower()
@@ -154,6 +184,12 @@ def decide_mode(url: str, mode_arg: str):
 
 
 def main():
+    """
+    Main entry point for the CLI downloader application.
+    
+    Parses command line arguments and initiates the appropriate download mode
+    (HTTP or HLS) based on the provided URL and options.
+    """
     args = build_argparser().parse_args()
     url = args.url
     default_out = Path.cwd() / "downloads" / "output.mp4"
@@ -181,7 +217,6 @@ def main():
         headers["Origin"] = origin
     headers.setdefault("Accept", "*/*")
     headers.setdefault("Accept-Language", "en-US,en;q=0.9")
-    # Avoid advertising brotli to prevent dependency on external 'brotli' package
     headers.setdefault("Accept-Encoding", "gzip, deflate")
     if args.cookies:
         headers["Cookie"] = args.cookies

@@ -23,7 +23,19 @@ def capture_m3u8(
     timeout_seconds: int = 20,
     verbose: bool = True,
 ) -> List[str]:
-    """Legacy helper: returns a list of request URLs that contain .m3u8."""
+    """
+    Legacy helper function to capture M3U8 URLs from a web page.
+    
+    Args:
+        page_url: The URL of the web page to capture from.
+        headers: Optional HTTP headers to include in requests.
+        headless: Whether to run the browser in headless mode.
+        timeout_seconds: Timeout in seconds to wait for network idle.
+        verbose: Whether to print verbose output during capture.
+        
+    Returns:
+        List of unique M3U8 URLs found during page interaction.
+    """
     found: List[str] = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=headless)
@@ -47,7 +59,7 @@ def capture_m3u8(
 
         context.close()
         browser.close()
-    # Deduplicate preserving order
+    
     seen = set()
     uniq = []
     for u in found:
@@ -67,12 +79,23 @@ def capture_media(
     include_m3u8_body: bool = False,
 ) -> Tuple[List[dict], str]:
     """
-    Capture media-related requests and responses.
-
-    Returns (items, cookie_header) where items are dicts like:
-      {"url": str, "kind": "request"|"response", "content_type": str|None, "body": str|None}
-
-    cookie_header is a synthesized "Cookie" header from the browser context.
+    Capture media-related requests and responses from a web page.
+    
+    This function uses Playwright to intercept network traffic and capture
+    media-related URLs including M3U8 playlists, MP4 videos, and TS segments.
+    
+    Args:
+        page_url: The URL of the web page to capture from.
+        headers: Optional HTTP headers to include in requests.
+        headless: Whether to run the browser in headless mode.
+        timeout_seconds: Timeout in seconds to wait for network activity.
+        verbose: Whether to print verbose output during capture.
+        include_m3u8_body: Whether to fetch and include M3U8 playlist content.
+        
+    Returns:
+        Tuple containing:
+        - List of media items (dicts with url, kind, content_type, body, etc.)
+        - Cookie header string synthesized from browser context
     """
     found: List[dict] = []
     # Track media activity per page to decide closing pop-ups
@@ -131,6 +154,7 @@ def capture_media(
         page = context.new_page()
 
         def looks_like_media(url: str) -> bool:
+            """Check if a URL appears to be a media file based on its extension."""
             u = url.lower()
             return (
                 ".m3u8" in u
@@ -141,6 +165,7 @@ def capture_media(
             )
 
         def on_request(req, page_ref=None):
+            """Handle media-related network requests."""
             url = req.url
             if looks_like_media(url):
                 if verbose:
@@ -187,6 +212,7 @@ def capture_media(
                     pass
 
         def on_response(resp, page_ref=None):
+            """Handle media-related network responses."""
             url = resp.url
             ct = (resp.headers.get("content-type") or "").lower()
             hit = (
@@ -255,7 +281,7 @@ def capture_media(
                     pass
 
         def attach_listeners(p):
-            # Initialize media counter
+            """Attach request/response listeners to a page."""
             try:
                 page_media_counts.setdefault(p, 0)
             except Exception:
@@ -277,9 +303,8 @@ def capture_media(
             pass
 
         def on_new_page(p):
-            # Attach listeners to observe any media quickly
+            """Handle new pages/pop-ups by attaching listeners and managing focus."""
             attach_listeners(p)
-            # Immediately close pop-ups/new tabs unless they start media; refocus main page
             try:
                 p.wait_for_timeout(800)
             except Exception:
@@ -320,16 +345,13 @@ def capture_media(
 
         context.on("page", on_new_page)
 
-        # Step 1: Open URL
         page.goto(page_url, wait_until="domcontentloaded")
         
-        # Step 2: Wait for ads to open in new tabs and handle them
         try:
-            page.wait_for_timeout(3000)  # Wait for ads to potentially open
+            page.wait_for_timeout(3000)
         except Exception:
             pass
             
-        # Step 3: Close any ad tabs that opened (keep only main page)
         try:
             main_page = page
             for p in list(context.pages):
@@ -341,20 +363,18 @@ def capture_media(
         except Exception:
             pass
             
-        # Step 4: Reload the main page
         try:
             page.reload(wait_until="domcontentloaded")
         except Exception:
             pass
             
-        # Step 5: Wait a moment after reload
         try:
             page.wait_for_timeout(2000)
         except Exception:
             pass
 
-        # Helper: attempt to trigger playback with multiple common gestures
         def attempt_play(p):
+            """Attempt to trigger video playback using multiple common gestures."""
             try:
                 p.click("video", timeout=1500, force=True)
             except Exception:
@@ -398,26 +418,21 @@ def capture_media(
             except Exception:
                 pass
 
-        # Step 6: Click on video after reload to trigger HLS requests
         try:
             page.bring_to_front()
         except Exception:
             pass
             
-        # More aggressive video clicking after reload
         for attempt in range(3):
             try:
-                # Try clicking video elements
                 page.click("video", timeout=2000, force=True)
             except Exception:
                 pass
             try:
-                # Try clicking play buttons
                 page.click("button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control", timeout=1000, force=True)
             except Exception:
                 pass
             try:
-                # Execute comprehensive play script
                 page.evaluate("""
                     (() => {
                         // Click all videos
@@ -457,7 +472,6 @@ def capture_media(
                 page.wait_for_timeout(1500)
             except Exception:
                 pass
-        # Close any extra pages that did not produce media and refocus main page
         try:
             for p2 in list(context.pages):
                 if p2 is page:
@@ -474,12 +488,10 @@ def capture_media(
         except Exception:
             pass
 
-        # Intercept for at least 12 seconds after attempting playback (first 5s for player start)
         try:
             page.wait_for_timeout(12000)
         except PlaywrightTimeoutError:
             pass
-        # Then wait for remaining time if larger than 12s
         extra_ms = max(0, (timeout_seconds * 1000) - 12000)
         if extra_ms:
             try:
@@ -487,11 +499,9 @@ def capture_media(
             except PlaywrightTimeoutError:
                 pass
 
-        # Construct a Cookie header from the context cookies
         cookies = context.cookies()
         cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies) if cookies else ""
 
-        # Close API request context if created
         try:
             if api_ctx is not None:
                 api_ctx.dispose()
@@ -499,8 +509,6 @@ def capture_media(
             pass
         context.close()
         browser.close()
-
-    # Deduplicate by URL preserving order
     seen = set()
     uniq: List[dict] = []
     for it in found:
