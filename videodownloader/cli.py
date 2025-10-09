@@ -181,7 +181,8 @@ def main():
         headers["Origin"] = origin
     headers.setdefault("Accept", "*/*")
     headers.setdefault("Accept-Language", "en-US,en;q=0.9")
-    headers.setdefault("Accept-Encoding", "gzip, deflate, br")
+    # Avoid advertising brotli to prevent dependency on external 'brotli' package
+    headers.setdefault("Accept-Encoding", "gzip, deflate")
     if args.cookies:
         headers["Cookie"] = args.cookies
 

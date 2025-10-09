@@ -93,11 +93,41 @@ def capture_media(
         eff_headers.setdefault("Origin", origin)
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=headless)
+        # Launch Chromium with minimal automation fingerprinting
+        browser = pw.chromium.launch(
+            headless=headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=NetworkService",
+            ],
+        )
+        # Create a context that looks like a normal user session
         context = browser.new_context(
             user_agent=eff_headers.get("User-Agent", DEFAULT_UA),
             extra_http_headers={k: v for k, v in eff_headers.items() if k.lower() != "user-agent"},
+            ignore_https_errors=True,
+            viewport={"width": 1366, "height": 768},
+            locale="en-US",
+            timezone_id="UTC",
+            color_scheme="light",
         )
+        # API request context that shares cookies/storage with the browser context
+        try:
+            api_ctx = pw.request.new_context(storage_state=context.storage_state())
+        except Exception:
+            api_ctx = None
+        try:
+            context.add_init_script(
+                """
+                // Reduce automation signals
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = window.chrome || { runtime: {} };
+                Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+                """
+            )
+        except Exception:
+            pass
         page = context.new_page()
 
         def looks_like_media(url: str) -> bool:
@@ -173,6 +203,32 @@ def capture_media(
                         body = resp.text()
                     except Exception:
                         body = None
+                    # Fallback: fetch m3u8 text via API context using the same cookies
+                    if body is None and api_ctx is not None:
+                        try:
+                            hdrs = {
+                                "User-Agent": eff_headers.get("User-Agent", DEFAULT_UA),
+                                "Accept": eff_headers.get("Accept", "*/*"),
+                                "Accept-Language": eff_headers.get("Accept-Language", "en-US,en;q=0.9"),
+                            }
+                            ref_val = eff_headers.get("Referer") or page_url
+                            if ref_val:
+                                hdrs["Referer"] = ref_val
+                                try:
+                                    ro = urlparse(ref_val)
+                                    origin = f"{ro.scheme}://{ro.netloc}" if ro.scheme and ro.netloc else None
+                                except Exception:
+                                    origin = None
+                                if origin:
+                                    hdrs["Origin"] = origin
+                            r = api_ctx.get(url, headers=hdrs, timeout=15000)
+                            if getattr(r, "ok", False):
+                                try:
+                                    body = r.text()
+                                except Exception:
+                                    body = None
+                        except Exception:
+                            pass
                 # Capture response headers if available
                 resp_headers = {}
                 try:
@@ -209,6 +265,17 @@ def capture_media(
 
         attach_listeners(page)
 
+        # Also listen at the browser context level to capture requests from
+        # service workers or frames not directly tied to the current Page object.
+        try:
+            context.on("request", lambda req: on_request(req))
+        except Exception:
+            pass
+        try:
+            context.on("response", lambda resp: on_response(resp))
+        except Exception:
+            pass
+
         def on_new_page(p):
             # Attach listeners to observe any media quickly
             attach_listeners(p)
@@ -226,67 +293,194 @@ def capture_media(
                 page.bring_to_front()
             except Exception:
                 pass
-
-        context.on("page", on_new_page)
-
-        page.goto(page_url, wait_until="domcontentloaded")
-        # Try to kick off playback to trigger HLS requests
-        try:
-            # Directly click the <video> element and common Fluid Player controls
+            # After closing pop-up, try to trigger playback again on main page
             try:
-                page.click("video", timeout=2000, force=True)
+                page.click("video", timeout=1500, force=True)
             except Exception:
                 pass
-            page.evaluate(
-                """
-                (() => {
-                  const vids = Array.from(document.querySelectorAll('video'));
-                  vids.forEach(v => {
-                    try {
-                      v.muted = true;
-                      v.autoplay = true;
-                      v.click();
-                      v.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-                      const p = v.play && v.play();
-                      if (p && typeof p.catch === 'function') { p.catch(()=>{}); }
-                    } catch(e){}
-                  });
-
-                  // Fluid Player specific play button
-                  const fluidBtns = Array.from(document.querySelectorAll(".fluid_button.fluid_control_playpause, [data-tool='playpause']"));
-                  fluidBtns.slice(0,3).forEach(b => { try { b.click(); } catch(e){} });
-
-                  // Click common containers to simulate user gesture
-                  const containers = Array.from(document.querySelectorAll('.video-container, .fluid_video_wrapper, .mainplayer'));
-                  containers.slice(0,3).forEach(c => { try { c.click(); } catch(e){} });
-
-                  // Generic players
-                  const btns = Array.from(document.querySelectorAll(
-                    "button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control, button, [class*='play']"
-                  ));
-                  btns.slice(0,5).forEach(b => { try { b.click(); } catch(e){} });
-                })();
-                """
-            )
+            try:
+                page.evaluate(
+                    """
+                    (() => {
+                      const vids = Array.from(document.querySelectorAll('video'));
+                      vids.forEach(v => { try { v.muted = true; v.autoplay = true; v.click(); const pr = v.play && v.play(); if (pr && pr.catch) pr.catch(()=>{}); } catch(e){} });
+                      const btns = Array.from(document.querySelectorAll(
+                        "button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control, [class*='play']"
+                      ));
+                      btns.slice(0,3).forEach(b => { try { b.click(); } catch(e){} });
+                    })();
+                    """
+                )
+            except Exception:
+                pass
             try:
                 page.keyboard.press("Space")
             except Exception:
                 pass
+
+        context.on("page", on_new_page)
+
+        # Step 1: Open URL
+        page.goto(page_url, wait_until="domcontentloaded")
+        
+        # Step 2: Wait for ads to open in new tabs and handle them
+        try:
+            page.wait_for_timeout(3000)  # Wait for ads to potentially open
         except Exception:
             pass
-        # Ensure the main page is front-most after any pop-ups
+            
+        # Step 3: Close any ad tabs that opened (keep only main page)
+        try:
+            main_page = page
+            for p in list(context.pages):
+                if p != main_page:
+                    try:
+                        p.close()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+            
+        # Step 4: Reload the main page
+        try:
+            page.reload(wait_until="domcontentloaded")
+        except Exception:
+            pass
+            
+        # Step 5: Wait a moment after reload
+        try:
+            page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+        # Helper: attempt to trigger playback with multiple common gestures
+        def attempt_play(p):
+            try:
+                p.click("video", timeout=1500, force=True)
+            except Exception:
+                pass
+            try:
+                p.evaluate(
+                    """
+                    (() => {
+                      const vids = Array.from(document.querySelectorAll('video'));
+                      vids.forEach(v => {
+                        try {
+                          v.muted = true;
+                          v.autoplay = true;
+                          v.click();
+                          v.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                          const pr = v.play && v.play();
+                          if (pr && typeof pr.catch === 'function') { pr.catch(()=>{}); }
+                        } catch(e){}
+                      });
+
+                      // Fluid Player controls
+                      const fluidBtns = Array.from(document.querySelectorAll(".fluid_button.fluid_control_playpause, [data-tool='playpause']"));
+                      fluidBtns.slice(0,3).forEach(b => { try { b.click(); } catch(e){} });
+
+                      // Common containers
+                      const containers = Array.from(document.querySelectorAll('.video-container, .fluid_video_wrapper, .mainplayer'));
+                      containers.slice(0,3).forEach(c => { try { c.click(); } catch(e){} });
+
+                      // Generic players
+                      const btns = Array.from(document.querySelectorAll(
+                        "button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control, button, [class*='play']"
+                      ));
+                      btns.slice(0,5).forEach(b => { try { b.click(); } catch(e){} });
+                    })();
+                    """
+                )
+            except Exception:
+                pass
+            try:
+                p.keyboard.press("Space")
+            except Exception:
+                pass
+
+        # Step 6: Click on video after reload to trigger HLS requests
+        try:
+            page.bring_to_front()
+        except Exception:
+            pass
+            
+        # More aggressive video clicking after reload
+        for attempt in range(3):
+            try:
+                # Try clicking video elements
+                page.click("video", timeout=2000, force=True)
+            except Exception:
+                pass
+            try:
+                # Try clicking play buttons
+                page.click("button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control", timeout=1000, force=True)
+            except Exception:
+                pass
+            try:
+                # Execute comprehensive play script
+                page.evaluate("""
+                    (() => {
+                        // Click all videos
+                        const videos = document.querySelectorAll('video');
+                        videos.forEach(v => {
+                            try {
+                                v.muted = true;
+                                v.autoplay = true;
+                                v.click();
+                                v.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                                if (v.play) v.play().catch(() => {});
+                            } catch(e) {}
+                        });
+                        
+                        // Click play buttons
+                        const playButtons = document.querySelectorAll(
+                            'button[aria-label*="play"], .play-button, .plyr__control[data-plyr="play"], .vjs-play-control, [class*="play"]'
+                        );
+                        playButtons.forEach(btn => {
+                            try { btn.click(); } catch(e) {}
+                        });
+                        
+                        // Click video containers
+                        const containers = document.querySelectorAll('.video-container, .player, .video-player, .fluid_video_wrapper');
+                        containers.forEach(c => {
+                            try { c.click(); } catch(e) {}
+                        });
+                    })();
+                """)
+            except Exception:
+                pass
+            try:
+                page.keyboard.press("Space")
+            except Exception:
+                pass
+            try:
+                page.wait_for_timeout(1500)
+            except Exception:
+                pass
+        # Close any extra pages that did not produce media and refocus main page
+        try:
+            for p2 in list(context.pages):
+                if p2 is page:
+                    continue
+                if page_media_counts.get(p2, 0) == 0:
+                    try:
+                        p2.close()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         try:
             page.bring_to_front()
         except Exception:
             pass
 
-        # Intercept for at least 5 seconds after attempting playback
+        # Intercept for at least 12 seconds after attempting playback (first 5s for player start)
         try:
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(12000)
         except PlaywrightTimeoutError:
             pass
-        # Then wait for remaining time if larger than 5s
-        extra_ms = max(0, (timeout_seconds * 1000) - 5000)
+        # Then wait for remaining time if larger than 12s
+        extra_ms = max(0, (timeout_seconds * 1000) - 12000)
         if extra_ms:
             try:
                 page.wait_for_load_state("networkidle", timeout=extra_ms)
@@ -297,6 +491,12 @@ def capture_media(
         cookies = context.cookies()
         cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies) if cookies else ""
 
+        # Close API request context if created
+        try:
+            if api_ctx is not None:
+                api_ctx.dispose()
+        except Exception:
+            pass
         context.close()
         browser.close()
 

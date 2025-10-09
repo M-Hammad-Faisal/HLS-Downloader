@@ -1,10 +1,12 @@
 import sys
 import tempfile
 import asyncio
+import time
 from pathlib import Path
 import urllib.request
 import urllib.parse
 import signal
+import base64
 
 import aiohttp
 from PyQt5 import QtCore, QtWidgets
@@ -83,7 +85,8 @@ class HlsWorker(QtCore.QThread):
             headers["Origin"] = origin
         headers.setdefault("Accept", "*/*")
         headers.setdefault("Accept-Language", "en-US,en;q=0.9")
-        headers.setdefault("Accept-Encoding", "gzip, deflate, br")
+        # Avoid brotli to keep environment simple
+        headers.setdefault("Accept-Encoding", "gzip, deflate")
         headers.setdefault("Sec-Fetch-Dest", "empty")
         headers.setdefault("Sec-Fetch-Mode", "cors")
         # Compute Sec-Fetch-Site based on origin vs target URL
@@ -100,6 +103,13 @@ class HlsWorker(QtCore.QThread):
             headers.setdefault("Authorization", self.auth_hint)
         if self.cookies:
             headers["Cookie"] = self.cookies
+
+        # Debug: Log the headers being used for the request
+        self.log.emit(f"🔍 Debug - Request headers:")
+        for key, value in headers.items():
+            # Truncate long values for readability
+            display_value = value[:100] + "..." if len(value) > 100 else value
+            self.log.emit(f"  {key}: {display_value}")
 
         self._loop = asyncio.get_running_loop()
         self.out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,6 +290,12 @@ class MainWindow(QtWidgets.QWidget):
         self.btn_copy_selected.setEnabled(True)
         self.btn_copy_selected.clicked.connect(self._copy_selected_url)
         row_copy.addWidget(self.btn_copy_selected)
+        
+        self.btn_apply_headers = QtWidgets.QPushButton("Apply captured headers")
+        self.btn_apply_headers.setEnabled(True)
+        self.btn_apply_headers.clicked.connect(self._apply_captured_headers)
+        row_copy.addWidget(self.btn_apply_headers)
+        
         capL.addLayout(row_copy)
 
         # Double-click captured item to copy URL
@@ -357,6 +373,48 @@ class MainWindow(QtWidgets.QWidget):
         except Exception:
             QtWidgets.QMessageBox.information(self, "Copy URL", "Could not copy the selected URL.")
 
+    def _apply_captured_headers(self):
+        """Apply headers from the selected captured request to the input fields."""
+        try:
+            idx = self.capture_list.currentRow()
+            if idx < 0 or idx >= len(self.captured_items):
+                QtWidgets.QMessageBox.information(self, "Apply Headers", "Select an item in the capture list first.")
+                return
+            
+            item = self.captured_items[idx]
+            headers = item.get("headers", {})
+            
+            # Apply User-Agent
+            ua = headers.get("User-Agent") or headers.get("user-agent")
+            if ua:
+                self.ua_in.setText(ua)
+            
+            # Apply Referer
+            referer = headers.get("Referer") or headers.get("referer")
+            if referer:
+                self.ref_in.setText(referer)
+            
+            # Apply Authorization if present
+            auth = headers.get("Authorization") or headers.get("authorization")
+            if auth:
+                # Add to cookies field if not already there
+                current_cookies = self.cookies_in.text().strip()
+                if "Authorization:" not in current_cookies:
+                    if current_cookies and not current_cookies.endswith("; "):
+                        current_cookies += "; "
+                    current_cookies += f"Authorization: {auth}"
+                    self.cookies_in.setText(current_cookies)
+            
+            # Apply any captured cookies
+            cookie_header = item.get("cookie_header", "")
+            if cookie_header and cookie_header != self.cookies_in.text().strip():
+                self.cookies_in.setText(cookie_header)
+            
+            self.status.setText("Applied headers from selected request")
+            
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Apply Headers", f"Could not apply headers: {e}")
+
     def _derive_nested_output(self, url: str) -> Path:
         """Derive downloads/<domain>/<path>/<file>.mp4 from the given URL."""
         try:
@@ -392,7 +450,12 @@ class MainWindow(QtWidgets.QWidget):
         default_out = str(Path.cwd() / "downloads" / "output.mp4")
         if not out_path or out_path == default_out:
             try:
-                derived = self._derive_nested_output(url)
+                # Use the original page URL for file path generation instead of variant URL
+                page_url = self.page_in.text().strip()
+                if page_url:
+                    derived = self._derive_nested_output(page_url)
+                else:
+                    derived = self._derive_nested_output(url)
                 if not self.remux_cb.isChecked() and derived.suffix.lower() == ".mp4":
                     derived = derived.with_suffix(".ts")
                 out_path = str(derived.resolve())
@@ -411,9 +474,24 @@ class MainWindow(QtWidgets.QWidget):
         self.log.clear()
         self._append(f"Queued: {url}\nSaving to: {out_path}")
 
-        # Default referer to best captured page/frame URL if not provided
+        # Check if captured data is fresh (within 5 minutes)
+        current_time = time.time()
+        oldest_capture = None
+        for item in getattr(self, "captured_items", []) or []:
+            capture_time = item.get("capture_timestamp")
+            if capture_time:
+                if oldest_capture is None or capture_time < oldest_capture:
+                    oldest_capture = capture_time
+        
+        if oldest_capture and (current_time - oldest_capture) > 300:  # 5 minutes = 300 seconds
+            minutes_old = int((current_time - oldest_capture) / 60)
+            self._append(f"⚠️  Warning: Captured data is {minutes_old} minutes old. Consider re-capturing for fresh tokens.")
+
+        # Prefer intercepted Referer for the selected URL; override any manual value if found
         ref = self.ref_in.text().strip()
-        if not ref:
+        try:
+            captured_ref = None
+            target_host = None
             try:
                 target_host = urllib.parse.urlparse(url).netloc
             except Exception:
@@ -425,11 +503,11 @@ class MainWindow(QtWidgets.QWidget):
                 ureq = it.get("url") or ""
                 if ureq == url:
                     hdrs = it.get("headers") or {}
-                    ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
-                    if ref:
+                    captured_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                    if captured_ref:
                         break
             # Else any request on same host
-            if not ref and target_host:
+            if not captured_ref and target_host:
                 for it in getattr(self, "captured_items", []) or []:
                     if it.get("kind") != "request":
                         continue
@@ -439,9 +517,14 @@ class MainWindow(QtWidgets.QWidget):
                         host = None
                     if host and host == target_host:
                         hdrs = it.get("headers") or {}
-                        ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
-                        if ref:
+                        captured_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                        if captured_ref:
                             break
+            if captured_ref:
+                ref = captured_ref
+                self.ref_in.setText(captured_ref)
+        except Exception:
+            pass
         # Fallback to page URL if still empty
         ref = ref or self.page_in.text().strip()
         ua = self.ua_in.text().strip() or DEFAULT_UA
@@ -516,6 +599,12 @@ class MainWindow(QtWidgets.QWidget):
     def _on_captured(self, items, cookie_header):
         self.status.setText("Captured")
         self.btn_capture.setEnabled(True)
+        
+        # Add timestamp to each captured item
+        capture_time = time.time()
+        for item in items:
+            item["capture_timestamp"] = capture_time
+            
         self.captured_items = items
         self.captured_cookie = cookie_header or ""
         if not self.cookies_in.text().strip() and self.captured_cookie:
@@ -598,10 +687,26 @@ class MainWindow(QtWidgets.QWidget):
                         site_val = "cross-site"
                     hdrs.setdefault("Accept", "*/*")
                     hdrs.setdefault("Accept-Language", "en-US,en;q=0.9")
-                    hdrs.setdefault("Accept-Encoding", "gzip, deflate, br")
+                    # Avoid brotli to keep urllib fallback simple
+                    hdrs.setdefault("Accept-Encoding", "gzip, deflate")
                     hdrs.setdefault("Sec-Fetch-Dest", "empty")
                     hdrs.setdefault("Sec-Fetch-Mode", "cors")
                     hdrs.setdefault("Sec-Fetch-Site", site_val)
+                    # Common client hints to satisfy stricter WAFs if not present
+                    # Prefer values from captured headers if available
+                    try:
+                        ch = h if 'h' in locals() else {}
+                        sec_ch_ua = ch.get("sec-ch-ua") or ch.get("Sec-CH-UA") or "\"Chromium\";v=124, \"Not.A/Brand\";v=24"
+                        sec_ch_platform = ch.get("sec-ch-ua-platform") or ch.get("Sec-CH-UA-Platform") or "\"macOS\""
+                        sec_ch_mobile = ch.get("sec-ch-ua-mobile") or ch.get("Sec-CH-UA-Mobile") or "?0"
+                    except Exception:
+                        sec_ch_ua, sec_ch_platform, sec_ch_mobile = None, None, None
+                    if sec_ch_ua:
+                        hdrs.setdefault("Sec-CH-UA", sec_ch_ua)
+                    if sec_ch_platform:
+                        hdrs.setdefault("Sec-CH-UA-Platform", sec_ch_platform)
+                    if sec_ch_mobile:
+                        hdrs.setdefault("Sec-CH-UA-Mobile", sec_ch_mobile)
                     if captured_rtype in ("xhr", "fetch"):
                         hdrs.setdefault("X-Requested-With", "XMLHttpRequest")
                     # Forward Authorization if present in captured headers
@@ -633,19 +738,63 @@ class MainWindow(QtWidgets.QWidget):
                     self.variant_combo.addItem(label)
                     self.variant_uris.append(v.uri)
                 self._append("Variants listed. Choose a resolution and click 'Download selected'.")
-                # Prompt user immediately to choose a quality; auto-start if confirmed
-                labels = [self.variant_combo.itemText(i) for i in range(self.variant_combo.count())]
-                if labels:
-                    chosen, ok = QtWidgets.QInputDialog.getItem(self, "Choose Quality", "Available qualities:", labels, 0, False)
-                    if ok:
-                        idx = labels.index(chosen)
-                        self.variant_combo.setCurrentIndex(idx)
-                        self._use_selected_variant()
-                        self._start()
+                # Auto-select the first (highest quality) resolution
+                if self.variant_combo.count() > 0:
+                    self.variant_combo.setCurrentIndex(0)
+                    self._use_selected_variant()
             else:
                 self._append("No variants found in master playlist.")
         else:
-            self._append("No master playlist found. Click play and try capture again.")
+            # Fallback: derive variants directly from captured .m3u8 URLs
+            try:
+                m3u8_urls = []
+                for it in items:
+                    u = (it.get("url") or "").lower()
+                    if u.endswith(".m3u8"):
+                        m3u8_urls.append(it.get("url"))
+                # Try to infer resolution labels from URL path (supports base64-encoded segments like MTA4MA== → 1080)
+                def infer_label(u: str) -> str:
+                    try:
+                        path_segs = [seg for seg in (urllib.parse.urlparse(u).path or "").split("/") if seg]
+                        # Look for a segment that decodes from base64 to digits
+                        for seg in path_segs:
+                            try:
+                                dec = base64.b64decode(seg + "==" if len(seg) % 4 != 0 else seg).decode("utf-8", errors="ignore")
+                                dec2 = "".join(ch for ch in dec if ch.isdigit())
+                                if dec2.isdigit():
+                                    return dec2
+                            except Exception:
+                                pass
+                        # Fallback: use any numeric-looking segment directly
+                        for seg in path_segs:
+                            if seg.isdigit():
+                                return seg
+                    except Exception:
+                        pass
+                    return "unknown"
+
+                derived = [(infer_label(u), u) for u in m3u8_urls]
+                # Prefer descending resolution if numeric
+                def sort_key(t):
+                    lbl = t[0]
+                    return -(int(lbl) if lbl.isdigit() else -1)
+                derived.sort(key=sort_key)
+
+                if derived:
+                    self.variant_combo.setEnabled(True)
+                    self.btn_use_variant.setEnabled(True)
+                    self.btn_download_selected.setEnabled(True)
+                    self.variant_combo.clear()
+                    self.variant_uris = []
+                    for lbl, u in derived:
+                        label = f"{lbl if lbl != 'unknown' else 'unknown'}"
+                        self.variant_combo.addItem(label)
+                        self.variant_uris.append(u)
+                    self._append("Variants inferred from captured URLs. Select one and download.")
+                else:
+                    self._append("No master playlist found. Click play and try capture again.")
+            except Exception:
+                self._append("No master playlist found. Click play and try capture again.")
 
     @QtCore.pyqtSlot(str)
     def _on_capture_err(self, msg):
@@ -690,12 +839,17 @@ class MainWindow(QtWidgets.QWidget):
                 self.ref_in.setText(cap_ref)
         except Exception:
             pass
-        # auto-fill output file name based on URI if using default/empty
+        # auto-fill output file name based on page URL if using default/empty
         default_out = str(Path.cwd() / "downloads" / "output.mp4")
         cur_out = self.out_in.text().strip()
         if not cur_out or cur_out == default_out:
             try:
-                derived = self._derive_nested_output(chosen_uri)
+                # Use the original page URL for file path generation instead of variant URL
+                page_url = self.page_in.text().strip()
+                if page_url:
+                    derived = self._derive_nested_output(page_url)
+                else:
+                    derived = self._derive_nested_output(chosen_uri)
                 self.out_in.setText(str(derived.resolve()))
             except Exception:
                 pass
