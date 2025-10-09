@@ -210,35 +210,20 @@ def capture_media(
         attach_listeners(page)
 
         def on_new_page(p):
+            # Attach listeners to observe any media quickly
             attach_listeners(p)
-            # Try to kick playback in the new page as well
+            # Immediately close pop-ups/new tabs unless they start media; refocus main page
             try:
-                p.click("video", timeout=2000, force=True)
-            except Exception:
-                pass
-            try:
-                p.evaluate(
-                    """
-                    (() => {
-                      const vids = Array.from(document.querySelectorAll('video'));
-                      vids.forEach(v => { try { v.muted = true; v.autoplay = true; v.click(); const pr = v.play && v.play(); if (pr && pr.catch) pr.catch(()=>{}); } catch(e){} });
-                    })();
-                    """
-                )
-            except Exception:
-                pass
-            # If this pop-up/new tab does not produce media quickly, close it and refocus main page
-            try:
-                p.wait_for_timeout(1500)
+                p.wait_for_timeout(800)
             except Exception:
                 pass
             try:
                 if page_media_counts.get(p, 0) == 0:
                     p.close()
-                    try:
-                        page.bring_to_front()
-                    except Exception:
-                        pass
+            except Exception:
+                pass
+            try:
+                page.bring_to_front()
             except Exception:
                 pass
 
