@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "hlsdownloader"
 version = "0.3.0"
 description = "HLS Downloader - A comprehensive Python application for downloading HLS video streams and media files"
-authors = [{name = "HLS Downloader Team"}]
+authors = [{name = "Muhammad Hammad Faisal", email = "hammadfaisal178@gmail.com"}]
 license = {text = "MIT"}
 requires-python = ">=3.7"
 dependencies = [
