@@ -41,7 +41,6 @@ def derive_output_from_url(url: str, downloads_dir: Path) -> Path:
         segs = [sanitize(seg) for seg in (u.path or "").split("/") if seg]
         if not segs:
             segs = ["video"]
-        # last segment becomes filename stem; strip playlist extensions if present
         stem = segs[-1]
         lower = stem.lower()
         if lower.endswith(".m3u8"):
@@ -181,7 +180,6 @@ def get_timeout():
 
 def select_resolution_interactive(captured_items):
     """Interactive resolution selection from captured media items."""
-    # Filter for media-related items (M3U8, MP4, TS files)
     media_items = []
     for item in captured_items:
         url = item.get("url", "") or ""
@@ -349,7 +347,6 @@ def main():
             print(f"Selected Media URL: {selected_url}")
             url = selected_url
             
-            # Use page URL for directory structure, not the M3U8 URL
             use_interactive = True
             
         except Exception as e:
@@ -372,11 +369,8 @@ def main():
     out_path = Path(args.out)
     if out_path == default_out:
         if use_interactive:
-            # Use page URL for directory structure, but extract filename from media URL
-            page_path = derive_output_from_url(page_url, default_out.parent)
-            media_path = derive_output_from_url(url, default_out.parent)
-            # Use page URL directory structure with media URL filename
-            out_path = page_path.parent / media_path.name
+            # Use page URL for both directory structure and filename
+            out_path = derive_output_from_url(page_url, default_out.parent)
         else:
             out_path = derive_output_from_url(url, default_out.parent)
     

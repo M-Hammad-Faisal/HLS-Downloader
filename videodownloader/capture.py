@@ -98,14 +98,12 @@ def capture_media(
         - Cookie header string synthesized from browser context
     """
     found: List[dict] = []
-    # Track media activity per page to decide closing pop-ups
     page_media_counts: Dict[object, int] = {}
     # Prepare effective headers
     eff_headers = dict(headers or {})
     eff_headers.setdefault("User-Agent", DEFAULT_UA)
     eff_headers.setdefault("Accept", "*/*")
     eff_headers.setdefault("Accept-Language", "en-US,en;q=0.9")
-    # Derive Referer/Origin from page_url if not provided
     eff_headers.setdefault("Referer", page_url)
     try:
         uo = urlparse(eff_headers.get("Referer", page_url))
@@ -116,7 +114,6 @@ def capture_media(
         eff_headers.setdefault("Origin", origin)
 
     with sync_playwright() as pw:
-        # Launch Chromium with minimal automation fingerprinting
         browser = pw.chromium.launch(
             headless=headless,
             args=[
@@ -124,7 +121,6 @@ def capture_media(
                 "--disable-features=NetworkService",
             ],
         )
-        # Create a context that looks like a normal user session
         context = browser.new_context(
             user_agent=eff_headers.get("User-Agent", DEFAULT_UA),
             extra_http_headers={k: v for k, v in eff_headers.items() if k.lower() != "user-agent"},
@@ -134,7 +130,6 @@ def capture_media(
             timezone_id="UTC",
             color_scheme="light",
         )
-        # API request context that shares cookies/storage with the browser context
         try:
             api_ctx = pw.request.new_context(storage_state=context.storage_state())
         except Exception:
