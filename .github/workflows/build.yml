@@ -39,7 +39,6 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install --cask firefox
-        brew install playwright
 
     - name: Install system dependencies (Windows)
       if: runner.os == 'Windows'
