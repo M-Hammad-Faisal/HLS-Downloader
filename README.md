@@ -176,6 +176,61 @@ This tool is for downloading content you have legal rights to access. Users must
 
 Do not use to bypass DRM, download copyrighted content without permission, or violate terms of service.
 
+## Building Executables
+
+### Assets Included
+The project includes custom application icons:
+- **Windows Icon**: `assets/icon.ico` - Used for Windows executable builds
+- **macOS Icon**: `assets/icon.icns` - Used for macOS app bundle builds
+- **Additional Assets**: `assets/HLS Downloader.png` - Project branding image
+
+### Local Build
+Build executable for your current platform:
+
+```bash
+# Install build dependencies
+pip install -r requirements-dev.txt
+
+# Build executable (includes custom icons)
+make build
+
+# Clean build and rebuild
+make build-clean
+
+# View available build commands
+make help
+```
+
+**Build Output:**
+- Built executables are placed in the `release/` directory
+- Icons are automatically embedded in the executables
+- macOS builds create `.app` bundles with proper metadata
+
+### Automated Builds (CI/CD)
+The project includes GitHub Actions workflows for automated builds:
+
+- **Triggers**: Push to main/master, tags, pull requests, manual dispatch
+- **Platforms**: Windows (x64), macOS (x64, ARM64)
+- **Features**: Custom icons, code signing ready, automatic releases
+- **Artifacts**: Downloadable executables for each platform
+
+#### Creating a Release
+1. Tag your commit: `git tag v1.0.0`
+2. Push the tag: `git push origin v1.0.0`
+3. GitHub Actions automatically builds and creates a release with branded executables
+
+#### Build Matrix
+- **Windows**: `VideoDownloader-windows-x64.exe` (with custom icon)
+- **macOS Intel**: `VideoDownloader-macos-x64.app` (with custom icon and bundle)
+- **macOS Apple Silicon**: `VideoDownloader-macos-arm64.app` (native ARM64 with custom icon)
+
+### Build Features
+- **Custom Branding**: Application icons embedded in all builds
+- **Cross-Platform**: Supports Windows and macOS (Intel + Apple Silicon)
+- **Bundle Creation**: macOS builds include proper app bundles
+- **Dependency Bundling**: All required libraries included
+- **Size Optimization**: UPX compression for smaller executables
+
 ## Contributing
 
 1. Fork the repository

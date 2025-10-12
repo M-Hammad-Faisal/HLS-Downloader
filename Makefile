@@ -33,11 +33,22 @@ prettier:  ## Format JSON/YAML files with Prettier
 pre-commit:  ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 
+build:  ## Build executable for current platform
+	python build_executable.py
+
+build-clean:  ## Clean build directories and rebuild
+	python build_executable.py --clean
+	python build_executable.py
+
 clean:  ## Clean up cache and build files
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
-	rm -rf build/ dist/ .mypy_cache/ .pytest_cache/ htmlcov/
+	rm -rf build/ dist/ .mypy_cache/ .pytest_cache/ htmlcov/ release/
+	rm -f *.spec
+
+clean-all: clean  ## Clean everything including build artifacts
+	rm -rf release/
 
 all: format lint type-check test  ## Run all quality checks
 
