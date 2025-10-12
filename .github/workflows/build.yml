@@ -50,58 +50,8 @@ jobs:
         playwright install chromium
         playwright install-deps chromium
 
-    - name: Create build script
-      shell: bash
-      run: |
-        cat > build.py << 'EOF'
-        import PyInstaller.__main__
-        import sys
-        import os
-        
-        # Determine platform-specific settings
-        platform = "${{ matrix.platform }}"
-        arch = "${{ matrix.arch }}"
-        
-        # Base arguments for PyInstaller
-        args = [
-            'main.py',
-            '--name=HLS Downloader',
-            '--windowed',
-            '--onefile',
-            '--add-data=hlsdownloader:hlsdownloader',
-            '--hidden-import=PyQt5.QtCore',
-            '--hidden-import=PyQt5.QtGui',
-            '--hidden-import=PyQt5.QtWidgets',
-            '--hidden-import=aiohttp',
-            '--hidden-import=playwright',
-            '--hidden-import=asyncio',
-            '--collect-all=playwright',
-            '--collect-all=aiohttp',
-        ]
-        
-        # Platform-specific configurations
-        if platform == "windows":
-            args.extend([
-                '--icon=assets/icon.ico' if os.path.exists('assets/icon.ico') else '',
-                '--console',  # Keep console for debugging
-            ])
-        elif platform == "macos":
-            args.extend([
-                '--icon=assets/icon.icns' if os.path.exists('assets/icon.icns') else '',
-                '--osx-bundle-identifier=com.hlsdownloader.app',
-            ])
-        
-        # Remove empty strings
-        args = [arg for arg in args if arg]
-        
-        print(f"Building for {platform} {arch}")
-        print(f"PyInstaller args: {args}")
-        
-        PyInstaller.__main__.run(args)
-        EOF
-
     - name: Build executable
-      run: python build.py
+      run: python build_executable.py
 
     - name: Create release directory
       shell: bash
@@ -109,6 +59,17 @@ jobs:
         mkdir -p release
         if [ "${{ runner.os }}" == "Windows" ]; then
           cp "dist/HLS Downloader.exe" "release/HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}.exe"
+        elif [ "${{ runner.os }}" == "macOS" ]; then
+          # For macOS, we should have a .app bundle
+          if [ -d "dist/HLS Downloader.app" ]; then
+            # Create a zip file of the .app bundle for easier distribution
+            cd dist
+            zip -r "../release/HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}.app.zip" "HLS Downloader.app"
+            cd ..
+          else
+            # Fallback to executable if .app bundle wasn't created
+            cp "dist/HLS Downloader" "release/HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}"
+          fi
         else
           cp "dist/HLS Downloader" "release/HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}"
         fi

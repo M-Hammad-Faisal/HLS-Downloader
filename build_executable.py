@@ -165,6 +165,28 @@ def build_executable():
             if src.exists():
                 shutil.copytree(src, dst, dirs_exist_ok=True)
                 print(f"Copied app bundle to {dst}")
+                
+                # Try to code sign if developer identity is available
+                try:
+                    # Check if we have a signing identity
+                    result = subprocess.run(
+                        ["security", "find-identity", "-v", "-p", "codesigning"],
+                        capture_output=True, text=True
+                    )
+                    if "Developer ID Application" in result.stdout:
+                        print("Code signing the app bundle...")
+                        subprocess.run([
+                            "codesign", "--force", "--deep", "--sign", 
+                            "Developer ID Application", str(dst)
+                        ], check=True)
+                        print("App bundle signed successfully!")
+                    else:
+                        print("No Developer ID found. App will show security warnings.")
+                        print("To fix this, get an Apple Developer account and certificate.")
+                except Exception as e:
+                    print(f"Code signing failed: {e}")
+                    print("App will show security warnings when downloaded.")
+                
                 return
         else:
             src = Path("dist/HLS Downloader")
