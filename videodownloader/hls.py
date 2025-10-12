@@ -270,12 +270,20 @@ async def download_all_segments(session, segments, headers, concurrency, temp_di
             progress_fn(done, len(segments))
 
     tasks = [asyncio.create_task(worker(i, s)) for i, s in enumerate(segments)]
-    for t in asyncio.as_completed(tasks):
+    
+    try:
+        # Use asyncio.gather with return_exceptions=True to handle all tasks properly
+        await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception:
+        # If any task fails, we still want to continue with others
+        pass
+    finally:
+        # Cancel any remaining tasks if cancellation was requested
         if cancel_flag.is_set():
-            break
-        try:
-            await t
-        except Exception as e:
-            log_fn(f"Segment error: {e}")
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            # Wait for all tasks to complete or be cancelled
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     return [p for p in results if p is not None]
