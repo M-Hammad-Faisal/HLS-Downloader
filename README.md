@@ -1,226 +1,188 @@
 # VideoDownloader
 
-A comprehensive Python application for downloading HLS (HTTP Live Streaming) video streams and media files. This tool provides both GUI and CLI interfaces for capturing and downloading video content from web pages.
+A comprehensive Python application for downloading HLS (HTTP Live Streaming) video streams and media files. Provides both GUI and CLI interfaces for capturing and downloading video content from web pages.
 
 ## Features
 
-### 🎥 HLS Stream Downloading
-- Download HLS (.m3u8) streams with automatic quality selection
-- Support for encrypted streams (AES-128) with automatic decryption
-- Bandwidth and resolution-based stream selection
-- Concurrent segment downloading for faster speeds
-- Automatic remuxing to MP4 format
-
-### 🌐 Web Capture
-- Capture media URLs by intercepting network traffic from web pages
-- Support for various media formats (HLS, MP4, etc.)
-- Headless browser automation using Playwright
-- Custom headers and authentication support
-
-### 🖥️ User Interfaces
-- **GUI**: Modern PyQt5-based graphical interface
-- **CLI**: Command-line interface for automation and scripting
-- Real-time progress tracking and logging
-- Configurable download settings
-
-### 🔧 Advanced Features
-- Custom User-Agent and Referer headers
-- Cookie support for authenticated sessions
-- Configurable concurrent downloads
-- Automatic output path generation
-- Resume capability for interrupted downloads
+- **HLS Stream Downloading**: Download .m3u8 streams with automatic quality selection
+- **Encrypted Stream Support**: AES-128 decryption with automatic key handling
+- **Web Capture**: Intercept media URLs from web pages using browser automation
+- **Dual Interface**: Modern PyQt5 GUI and command-line interface
+- **Concurrent Downloads**: Multi-threaded segment downloading for faster speeds
+- **Format Support**: Automatic MP4 remuxing with FFmpeg
+- **Authentication**: Custom headers, cookies, and User-Agent support
 
 ## Installation
 
 ### Prerequisites
-- Python 3.7 or higher
-- FFmpeg (for video processing)
+- Python 3.7+
+- FFmpeg
 
-### Install Dependencies
+### Setup
 ```bash
 pip install -r requirements.txt
+playwright install chromium
 ```
 
-### Install Playwright Browsers
+### Development Setup
+For development with linting and formatting tools:
+
 ```bash
-playwright install chromium
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Install pre-commit hooks
+pre-commit install
+
+# Format code with Black
+black videodownloader/
+
+# Sort imports with isort
+isort videodownloader/
+
+# Run linting with flake8
+flake8 videodownloader/
+
+# Type checking with mypy
+mypy videodownloader/
+
+# Format JSON/YAML with Prettier (requires Node.js)
+npx prettier --write "*.json" "*.yml" "*.yaml"
 ```
 
 ## Usage
 
 ### GUI Application
-Launch the graphical interface:
 ```bash
-python main.py
+python -m videodownloader.gui
 ```
 
-### CLI Downloader
-Use the command-line interface:
+### CLI Application
+
+#### Direct Download
 ```bash
-python cli_downloader.py [URL] [OPTIONS]
+# Download HLS stream
+python -m videodownloader.cli --url "https://example.com/playlist.m3u8"
+
+# Specify resolution
+python -m videodownloader.cli --url "https://example.com/playlist.m3u8" --res "1920x1080"
+
+# Custom output path
+python -m videodownloader.cli --url "https://example.com/playlist.m3u8" --out "video.mp4"
 ```
 
-#### CLI Options:
-- `--output, -o`: Output file path
-- `--resolution, -r`: Preferred resolution (e.g., "1920x1080")
-- `--bandwidth, -b`: Maximum bandwidth preference
-- `--user-agent, -ua`: Custom User-Agent header
-- `--referer, -ref`: Custom Referer header
-- `--cookies, -c`: Cookie string for authentication
-- `--concurrent, -j`: Number of concurrent downloads (default: 4)
-- `--no-remux`: Skip remuxing to MP4
-- `--downloads-dir`: Downloads directory (default: ./downloads)
-
-#### CLI Examples:
+#### Interactive Mode (Web Capture)
 ```bash
-# Download with automatic quality selection
-python cli_downloader.py "https://example.com/playlist.m3u8"
+# Interactive mode with page URL prompt
+python -m videodownloader.cli --interactive
 
-# Download with specific resolution
-python cli_downloader.py "https://example.com/playlist.m3u8" -r "1920x1080"
-
-# Download with custom output path
-python cli_downloader.py "https://example.com/playlist.m3u8" -o "my_video.mp4"
-
-# Download with authentication
-python cli_downloader.py "https://example.com/playlist.m3u8" -c "session=abc123"
+# Force interactive mode with specific page
+python -m videodownloader.cli --url "https://example.com/video-page" --interactive
 ```
 
-### Media Capture Tool
-Capture media URLs from web pages:
+#### Advanced Options
 ```bash
-python capture_m3u8.py [PAGE_URL] [OPTIONS]
+# With authentication
+python -m videodownloader.cli --url "URL" --cookies "session=abc123"
+
+# Custom headers
+python -m videodownloader.cli --url "URL" --ua "Custom-Agent" --ref "https://example.com"
+
+# Keep original TS format
+python -m videodownloader.cli --url "URL" --no-remux
 ```
 
-#### Capture Options:
-- `--timeout, -t`: Page load timeout in seconds (default: 20)
-- `--user-agent, -ua`: Custom User-Agent header
-- `--headless`: Run browser in headless mode (default: True)
-- `--download, -d`: Automatically download captured streams
-- `--output, -o`: Output directory for downloads
+### CLI Options
+- `--url URL`: Source URL (media or .m3u8)
+- `--interactive, -i`: Enable web capture mode
+- `--out OUT`: Output file path
+- `--mode {auto,http,hls}`: Download mode
+- `--ua UA`: User-Agent header
+- `--ref REF`: Referer header
+- `--cookies COOKIES`: Cookie string
+- `--res RES`: Preferred resolution (e.g., 1920x1080)
+- `--bw BW`: Preferred bandwidth (bps)
+- `--conc CONC`: Concurrent downloads (default: 4)
+- `--no-remux`: Keep TS format instead of MP4
+- `--no-headless`: Show browser for debugging
 
-#### Capture Examples:
-```bash
-# Capture media URLs from a page
-python capture_m3u8.py "https://example.com/video-page"
+## How It Works
 
-# Capture and automatically download
-python capture_m3u8.py "https://example.com/video-page" --download
+### HLS Download Process
+1. Parse master .m3u8 playlist
+2. Select best quality variant based on preferences
+3. Download segments concurrently
+4. Handle AES-128 decryption automatically
+5. Concatenate segments and remux to MP4
 
-# Capture with custom timeout
-python capture_m3u8.py "https://example.com/video-page" -t 30
-```
+### Web Capture Process
+1. Launch Playwright browser
+2. Intercept network requests
+3. Detect media URLs
+4. Present options for user selection
+5. Download selected media
 
 ## Project Structure
 
 ```
 VideoDownloader/
-├── main.py                 # GUI application launcher
-├── cli_downloader.py       # CLI application launcher
-├── capture_m3u8.py         # Media capture tool
-├── requirements.txt        # Python dependencies
-├── downloads/              # Default download directory
+├── requirements.txt        # Dependencies
+├── downloads/              # Default output directory
 └── videodownloader/        # Main package
-    ├── __init__.py         # Package initialization
-    ├── gui.py              # PyQt5 GUI implementation
+    ├── gui.py              # PyQt5 interface
     ├── cli.py              # Command-line interface
-    ├── capture.py          # Web page media capture
-    ├── hls.py              # HLS stream processing
-    ├── http_dl.py          # HTTP file downloading
-    └── utils.py            # Utility functions
+    ├── capture.py          # Web capture functionality
+    ├── hls.py              # HLS processing
+    ├── http_dl.py          # HTTP downloads
+    └── utils.py            # Utilities
 ```
-
-## Dependencies
-
-### Core Dependencies
-- **PyQt5** (≥5.15.0): GUI framework
-- **aiohttp** (≥3.8.0): Async HTTP client for downloads
-- **playwright** (≥1.40.0): Browser automation for media capture
-
-### Optional Dependencies
-- **pycryptodome** (≥3.15.0): AES decryption for encrypted HLS streams
 
 ## Configuration
 
 ### GUI Settings
-The GUI application saves settings in `hls_gui_settings.ini` in the current working directory. Settings include:
-- Default download directory
+Settings are saved in `hls_gui_settings.ini`:
+- Download directory
 - User-Agent string
-- Referer header
-- Cookie values
+- Headers and cookies
 - Concurrent download count
 
 ### Environment Variables
-- `FFMPEG_PATH`: Custom path to FFmpeg executable (if not in PATH)
+- `FFMPEG_PATH`: Custom FFmpeg path
 
 ## Supported Formats
 
-### Input Formats
-- HLS streams (.m3u8 playlists)
-- Direct HTTP media files
-- Encrypted HLS streams (AES-128)
-
-### Output Formats
-- MP4 (default, remuxed from downloaded segments)
-- TS (transport stream, original format)
-
-## Legal Notice
-
-This tool is intended for downloading content that you have the legal right to access and download. Users are responsible for ensuring they comply with:
-- Website terms of service
-- Copyright laws
-- Content licensing agreements
-- Local regulations
-
-**Do not use this tool to:**
-- Bypass DRM protection
-- Download copyrighted content without permission
-- Violate website terms of service
-- Access content illegally
+**Input**: HLS streams (.m3u8), direct HTTP media, encrypted streams (AES-128)
+**Output**: MP4 (default), TS (original format)
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **FFmpeg not found**
-   - Install FFmpeg and ensure it's in your PATH
-   - Or set the `FFMPEG_PATH` environment variable
-
-2. **Playwright browser not installed**
-   - Run `playwright install chromium`
-
-3. **AES decryption errors**
-   - Install pycryptodome: `pip install pycryptodome`
-
-4. **Network timeouts**
-   - Increase timeout values in CLI options
-   - Check your internet connection
-   - Some streams may have geographic restrictions
-
-5. **Permission errors**
-   - Ensure write permissions to the output directory
-   - Run with appropriate user permissions
+**FFmpeg not found**: Install FFmpeg and add to PATH or set `FFMPEG_PATH`
+**Browser issues**: Run `playwright install chromium`
+**Decryption errors**: Install with `pip install pycryptodome`
+**Network timeouts**: Check connection and geographic restrictions
+**Permission errors**: Ensure write access to output directory
+**GUI issues**: Verify PyQt5 installation
 
 ### Debug Mode
-Enable verbose logging by setting the environment variable:
-```bash
-export PYTHONPATH=.
-python -m videodownloader.cli --verbose [URL]
-```
+Use `--no-headless` to see browser interactions and check console output for errors.
+
+## Legal Notice
+
+This tool is for downloading content you have legal rights to access. Users must comply with:
+- Website terms of service
+- Copyright laws
+- Content licensing
+- Local regulations
+
+Do not use to bypass DRM, download copyrighted content without permission, or violate terms of service.
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+3. Make changes and add tests
+4. Submit a pull request
 
 ## License
 
-This project is provided as-is for educational and personal use. Please ensure you comply with all applicable laws and terms of service when using this tool.
-
-## Version History
-
-- **v0.1.0**: Initial release with HLS downloading and GUI
-- Current version includes web capture, CLI interface, and enhanced features
+Provided for educational and personal use. Ensure compliance with applicable laws and terms of service.

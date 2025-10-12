@@ -23,19 +23,7 @@ def capture_m3u8(
     timeout_seconds: int = 20,
     verbose: bool = True,
 ) -> List[str]:
-    """
-    Legacy helper function to capture M3U8 URLs from a web page.
-    
-    Args:
-        page_url: The URL of the web page to capture from.
-        headers: Optional HTTP headers to include in requests.
-        headless: Whether to run the browser in headless mode.
-        timeout_seconds: Timeout in seconds to wait for network idle.
-        verbose: Whether to print verbose output during capture.
-        
-    Returns:
-        List of unique M3U8 URLs found during page interaction.
-    """
+    """Legacy helper function to capture M3U8 URLs from a web page."""
     found: List[str] = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=headless)
@@ -78,28 +66,9 @@ def capture_media(
     verbose: bool = True,
     include_m3u8_body: bool = False,
 ) -> Tuple[List[dict], str]:
-    """
-    Capture media-related requests and responses from a web page.
-    
-    This function uses Playwright to intercept network traffic and capture
-    media-related URLs including M3U8 playlists, MP4 videos, and TS segments.
-    
-    Args:
-        page_url: The URL of the web page to capture from.
-        headers: Optional HTTP headers to include in requests.
-        headless: Whether to run the browser in headless mode.
-        timeout_seconds: Timeout in seconds to wait for network activity.
-        verbose: Whether to print verbose output during capture.
-        include_m3u8_body: Whether to fetch and include M3U8 playlist content.
-        
-    Returns:
-        Tuple containing:
-        - List of media items (dicts with url, kind, content_type, body, etc.)
-        - Cookie header string synthesized from browser context
-    """
+    """Capture media-related requests and responses from a web page."""
     found: List[dict] = []
     page_media_counts: Dict[object, int] = {}
-    # Prepare effective headers
     eff_headers = dict(headers or {})
     eff_headers.setdefault("User-Agent", DEFAULT_UA)
     eff_headers.setdefault("Accept", "*/*")
@@ -137,7 +106,6 @@ def capture_media(
         try:
             context.add_init_script(
                 """
-                // Reduce automation signals
                 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
                 window.chrome = window.chrome || { runtime: {} };
                 Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
@@ -165,7 +133,6 @@ def capture_media(
             if looks_like_media(url):
                 if verbose:
                     print("Request:", url)
-                # Try to capture request headers and resource type
                 try:
                     try:
                         req_headers = req.headers
@@ -224,7 +191,6 @@ def capture_media(
                         body = resp.text()
                     except Exception:
                         body = None
-                    # Fallback: fetch m3u8 text via API context using the same cookies
                     if body is None and api_ctx is not None:
                         try:
                             hdrs = {
@@ -250,7 +216,6 @@ def capture_media(
                                     body = None
                         except Exception:
                             pass
-                # Capture response headers if available
                 resp_headers = {}
                 try:
                     resp_headers = dict(resp.headers)
@@ -286,8 +251,6 @@ def capture_media(
 
         attach_listeners(page)
 
-        # Also listen at the browser context level to capture requests from
-        # service workers or frames not directly tied to the current Page object.
         try:
             context.on("request", lambda req: on_request(req))
         except Exception:
@@ -313,7 +276,6 @@ def capture_media(
                 page.bring_to_front()
             except Exception:
                 pass
-            # After closing pop-up, try to trigger playback again on main page
             try:
                 page.click("video", timeout=1500, force=True)
             except Exception:
@@ -390,17 +352,14 @@ def capture_media(
                         } catch(e){}
                       });
 
-                      // Fluid Player controls
                       const fluidBtns = Array.from(document.querySelectorAll(".fluid_button.fluid_control_playpause, [data-tool='playpause']"));
                       fluidBtns.slice(0,3).forEach(b => { try { b.click(); } catch(e){} });
 
-                      // Common containers
                       const containers = Array.from(document.querySelectorAll('.video-container, .fluid_video_wrapper, .mainplayer'));
                       containers.slice(0,3).forEach(c => { try { c.click(); } catch(e){} });
 
-                      // Generic players
                       const btns = Array.from(document.querySelectorAll(
-                        "button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control, button, [class*='play']"
+                        "button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control, [class*='play']"
                       ));
                       btns.slice(0,5).forEach(b => { try { b.click(); } catch(e){} });
                     })();
@@ -430,7 +389,6 @@ def capture_media(
             try:
                 page.evaluate("""
                     (() => {
-                        // Click all videos
                         const videos = document.querySelectorAll('video');
                         videos.forEach(v => {
                             try {
@@ -442,7 +400,6 @@ def capture_media(
                             } catch(e) {}
                         });
                         
-                        // Click play buttons
                         const playButtons = document.querySelectorAll(
                             'button[aria-label*="play"], .play-button, .plyr__control[data-plyr="play"], .vjs-play-control, [class*="play"]'
                         );
@@ -450,7 +407,6 @@ def capture_media(
                             try { btn.click(); } catch(e) {}
                         });
                         
-                        // Click video containers
                         const containers = document.querySelectorAll('.video-container, .player, .video-player, .fluid_video_wrapper');
                         containers.forEach(c => {
                             try { c.click(); } catch(e) {}

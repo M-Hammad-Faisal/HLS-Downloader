@@ -3,8 +3,6 @@ import asyncio
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-import aiohttp
-
 from .utils import fetch_bytes
 
 try:
@@ -14,7 +12,7 @@ except ImportError:
 
 
 class Variant:
-    """Represents an HLS stream variant with bandwidth and resolution information."""
+    """HLS stream variant with bandwidth and resolution."""
     
     def __init__(self, uri, bandwidth=None, resolution=None):
         self.uri = uri
@@ -23,7 +21,7 @@ class Variant:
 
 
 class KeyInfo:
-    """Represents encryption key information for HLS segments."""
+    """Encryption key information for HLS segments."""
     
     def __init__(self, method="NONE", uri=None, iv=None):
         self.method = method
@@ -32,7 +30,7 @@ class KeyInfo:
 
 
 class Segment:
-    """Represents an HLS media segment with duration, encryption, and sequence information."""
+    """HLS media segment with duration, encryption, and sequence."""
     
     def __init__(self, uri, duration=None, key: KeyInfo = None, seq=None):
         self.uri = uri
@@ -42,44 +40,22 @@ class Segment:
 
 
 def normalize_uri(base_url: str, uri: str) -> str:
-    """
-    Make a playlist URI absolute.
-
-    Handles:
-    - Absolute URLs: return as-is
-    - Scheme-less URLs: //host/path → scheme from base
-    - Relative paths: use urljoin(base, path)
-    - Paths that embed a hostname: /host.tld/… → scheme://host.tld/…
-    """
+    """Make a playlist URI absolute."""
     if not uri:
         return uri
     u = uri.strip()
-    # Already absolute
     if u.startswith("http://") or u.startswith("https://"):
         return u
-    # Scheme-less
     if u.startswith("//"):
         base = urlparse(base_url)
         return f"{base.scheme}:{u}"
-    # Site-relative path
     if u.startswith("/"):
-        # Prefer joining to base_url to preserve proxy-style paths (e.g., *.workers.dev)
-        # If a path embeds a hostname like /example.com/..., proxies often rely on path rewriting.
-        # Joining to base_url keeps requests going through the proxy.
         return urljoin(base_url, u)
-    # Default relative resolution
     return urljoin(base_url, u)
 
 
 def parse_resolution(s: str):
-    """Parse a resolution string (e.g., '1920x1080') into a tuple of integers.
-    
-    Args:
-        s: Resolution string in format 'WIDTHxHEIGHT'
-        
-    Returns:
-        Tuple of (width, height) as integers, or None if parsing fails
-    """
+    """Parse resolution string (e.g., '1920x1080') into (width, height)."""
     m = re.match(r"^\s*(\d+)\s*x\s*(\d+)\s*$", s or "")
     if not m:
         return None
@@ -87,15 +63,7 @@ def parse_resolution(s: str):
 
 
 def parse_master_playlist(text: str, base_url: str):
-    """Parse an HLS master playlist to extract stream variants.
-    
-    Args:
-        text: Master playlist content as string
-        base_url: Base URL for resolving relative URIs
-        
-    Returns:
-        List of Variant objects with bandwidth and resolution information
-    """
+    """Parse HLS master playlist to extract stream variants."""
     variants, attrs = [], {}
     for line in text.splitlines():
         line = line.strip()
@@ -122,15 +90,7 @@ def parse_master_playlist(text: str, base_url: str):
 
 
 def parse_media_playlist(text: str, base_url: str):
-    """Parse an HLS media playlist to extract segments.
-    
-    Args:
-        text: Media playlist content as string
-        base_url: Base URL for resolving relative URIs
-        
-    Returns:
-        List of Segment objects with duration, encryption, and sequence information
-    """
+    """Parse HLS media playlist to extract segments."""
     segments = []
     key = KeyInfo("NONE")
     seq = 0
@@ -174,16 +134,7 @@ def parse_media_playlist(text: str, base_url: str):
 
 
 def select_variant(variants, want_res=None, want_bw=None):
-    """Select the best variant from available options based on resolution or bandwidth preferences.
-    
-    Args:
-        variants: List of Variant objects to choose from
-        want_res: Desired resolution as (width, height) tuple
-        want_bw: Desired maximum bandwidth in bits per second
-        
-    Returns:
-        Best matching Variant object, or None if no variants available
-    """
+    """Select best variant based on resolution or bandwidth preferences."""
     if not variants:
         return None
     if want_res:
@@ -206,19 +157,7 @@ def select_variant(variants, want_res=None, want_bw=None):
 
 
 async def download_segment(session, seg: Segment, headers, idx: int, temp_dir: Path, cancel_flag):
-    """Download a single HLS segment with optional AES-128 decryption.
-    
-    Args:
-        session: aiohttp ClientSession for making requests
-        seg: Segment object containing URI and encryption info
-        headers: HTTP headers to include in requests
-        idx: Segment index for filename generation
-        temp_dir: Directory to save downloaded segments
-        cancel_flag: asyncio.Event to signal cancellation
-        
-    Returns:
-        Path to downloaded segment file, or None if cancelled/failed
-    """
+    """Download a single HLS segment with optional AES-128 decryption."""
     if cancel_flag.is_set():
         return None
     path = temp_dir / f"seg_{idx:06d}.ts"
@@ -241,21 +180,7 @@ async def download_segment(session, seg: Segment, headers, idx: int, temp_dir: P
 
 
 async def download_all_segments(session, segments, headers, concurrency, temp_dir: Path, log_fn, progress_fn, cancel_flag):
-    """Download all HLS segments concurrently with progress tracking.
-    
-    Args:
-        session: aiohttp ClientSession for making requests
-        segments: List of Segment objects to download
-        headers: HTTP headers to include in requests
-        concurrency: Maximum number of concurrent downloads
-        temp_dir: Directory to save downloaded segments
-        log_fn: Function to call for logging messages
-        progress_fn: Function to call with (completed, total) progress updates
-        cancel_flag: asyncio.Event to signal cancellation
-        
-    Returns:
-        List of successfully downloaded segment file paths
-    """
+    """Download all HLS segments concurrently with progress tracking."""
     sem = asyncio.Semaphore(concurrency)
     results = [None] * len(segments)
 
@@ -272,18 +197,14 @@ async def download_all_segments(session, segments, headers, concurrency, temp_di
     tasks = [asyncio.create_task(worker(i, s)) for i, s in enumerate(segments)]
     
     try:
-        # Use asyncio.gather with return_exceptions=True to handle all tasks properly
         await asyncio.gather(*tasks, return_exceptions=True)
     except Exception:
-        # If any task fails, we still want to continue with others
         pass
     finally:
-        # Cancel any remaining tasks if cancellation was requested
         if cancel_flag.is_set():
             for task in tasks:
                 if not task.done():
                     task.cancel()
-            # Wait for all tasks to complete or be cancelled
             await asyncio.gather(*tasks, return_exceptions=True)
 
     return [p for p in results if p is not None]
