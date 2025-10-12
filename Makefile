@@ -15,14 +15,14 @@ install-dev:  ## Install development dependencies
 	pre-commit install
 
 format:  ## Format code with Black and isort
-	black videodownloader/
-	isort videodownloader/
+	black hlsdownloader/
+	isort hlsdownloader/
 
 lint:  ## Run linting with flake8
-	flake8 videodownloader/
+	flake8 hlsdownloader/
 
 type-check:  ## Run type checking with mypy
-	mypy videodownloader/
+	mypy hlsdownloader/
 
 test:  ## Run tests with pytest
 	pytest

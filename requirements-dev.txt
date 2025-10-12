@@ -1,4 +1,4 @@
-# Development dependencies for VideoDownloader
+# Development dependencies for HLS Downloader
 # Code formatting
 black>=23.0.0
 isort>=5.12.0

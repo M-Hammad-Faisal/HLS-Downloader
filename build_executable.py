@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build script for creating VideoDownloader executables using PyInstaller.
+Build script for creating HLS Downloader executables using PyInstaller.
 Supports Windows and macOS platforms.
 """
 
@@ -46,9 +46,9 @@ def create_pyinstaller_spec():
     bundle_section = ''
     if platform_name == "macos":
         if os.path.exists("assets/icon.icns"):
-            bundle_section = 'app = BUNDLE(exe, name="VideoDownloader.app", icon="assets/icon.icns", bundle_identifier="com.videodownloader.app")'
+            bundle_section = 'app = BUNDLE(exe, name="HLS Downloader.app", icon="assets/icon.icns", bundle_identifier="com.hlsdownloader.app")'
         else:
-            bundle_section = 'app = BUNDLE(exe, name="VideoDownloader.app", bundle_identifier="com.videodownloader.app")'
+            bundle_section = 'app = BUNDLE(exe, name="HLS Downloader.app", bundle_identifier="com.hlsdownloader.app")'
     
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 
@@ -59,7 +59,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('videodownloader', 'videodownloader'),
+        ('hlsdownloader', 'hlsdownloader'),
     ],
     hiddenimports=[
         'PyQt5.QtCore',
@@ -98,7 +98,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='VideoDownloader',
+    name='HLS Downloader',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -117,16 +117,16 @@ exe = EXE(
 {bundle_section}
 '''
     
-    with open("VideoDownloader.spec", "w") as f:
+    with open("HLS-Downloader.spec", "w") as f:
         f.write(spec_content)
     
-    return "VideoDownloader.spec"
+    return "HLS-Downloader.spec"
 
 def build_executable():
     """Build the executable using PyInstaller."""
     platform_name, arch = get_platform_info()
     
-    print(f"Building VideoDownloader for {platform_name} {arch}")
+    print(f"Building HLS Downloader for {platform_name} {arch}")
     print("=" * 50)
     
     # Clean previous builds
@@ -157,18 +157,18 @@ def build_executable():
         
         # Copy built executable
         if platform_name == "windows":
-            src = Path("dist/VideoDownloader.exe")
-            dst = release_dir / f"VideoDownloader-{platform_name}-{arch}.exe"
+            src = Path("dist/HLS Downloader.exe")
+            dst = release_dir / f"HLS-Downloader-{platform_name}-{arch}.exe"
         elif platform_name == "macos":
-            src = Path("dist/VideoDownloader.app")
-            dst = release_dir / f"VideoDownloader-{platform_name}-{arch}.app"
+            src = Path("dist/HLS Downloader.app")
+            dst = release_dir / f"HLS-Downloader-{platform_name}-{arch}.app"
             if src.exists():
                 shutil.copytree(src, dst, dirs_exist_ok=True)
                 print(f"Copied app bundle to {dst}")
                 return
         else:
-            src = Path("dist/VideoDownloader")
-            dst = release_dir / f"VideoDownloader-{platform_name}-{arch}"
+            src = Path("dist/HLS Downloader")
+            dst = release_dir / f"HLS-Downloader-{platform_name}-{arch}"
         
         if src.exists():
             shutil.copy2(src, dst)

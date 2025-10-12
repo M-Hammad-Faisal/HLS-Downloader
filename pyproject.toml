@@ -3,10 +3,10 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "videodownloader"
+name = "hlsdownloader"
 version = "0.3.0"
-description = "A comprehensive Python application for downloading HLS video streams and media files"
-authors = [{name = "VideoDownloader Team"}]
+description = "HLS Downloader - A comprehensive Python application for downloading HLS video streams and media files"
+authors = [{name = "HLS Downloader Team"}]
 license = {text = "MIT"}
 requires-python = ">=3.7"
 dependencies = [
@@ -38,7 +38,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["videodownloader"]
+known_first_party = ["hlsdownloader"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.mypy]
@@ -69,10 +69,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=videodownloader --cov-report=html --cov-report=term-missing"
+addopts = "--cov=hlsdownloader --cov-report=html --cov-report=term-missing"
 
 [tool.coverage.run]
-source = ["videodownloader"]
+source = ["hlsdownloader"]
 omit = ["*/tests/*", "*/test_*"]
 
 [tool.coverage.report]

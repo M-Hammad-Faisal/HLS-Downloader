@@ -1,4 +1,6 @@
-# VideoDownloader
+# HLS Downloader
+
+![HLS Downloader](assets/HLS%20Downloader.png)
 
 A comprehensive Python application for downloading HLS (HTTP Live Streaming) video streams and media files. Provides both GUI and CLI interfaces for capturing and downloading video content from web pages.
 
@@ -35,16 +37,16 @@ pip install -r requirements-dev.txt
 pre-commit install
 
 # Format code with Black
-black videodownloader/
+black hlsdownloader/
 
 # Sort imports with isort
-isort videodownloader/
+isort hlsdownloader/
 
 # Run linting with flake8
-flake8 videodownloader/
+flake8 hlsdownloader/
 
 # Type checking with mypy
-mypy videodownloader/
+mypy hlsdownloader/
 
 # Format JSON/YAML with Prettier (requires Node.js)
 npx prettier --write "*.json" "*.yml" "*.yaml"
@@ -54,7 +56,7 @@ npx prettier --write "*.json" "*.yml" "*.yaml"
 
 ### GUI Application
 ```bash
-python -m videodownloader.gui
+python -m hlsdownloader.gui
 ```
 
 ### CLI Application
@@ -62,34 +64,34 @@ python -m videodownloader.gui
 #### Direct Download
 ```bash
 # Download HLS stream
-python -m videodownloader.cli --url "https://example.com/playlist.m3u8"
+python -m hlsdownloader.cli --url "https://example.com/playlist.m3u8"
 
 # Specify resolution
-python -m videodownloader.cli --url "https://example.com/playlist.m3u8" --res "1920x1080"
+python -m hlsdownloader.cli --url "https://example.com/playlist.m3u8" --res "1920x1080"
 
 # Custom output path
-python -m videodownloader.cli --url "https://example.com/playlist.m3u8" --out "video.mp4"
+python -m hlsdownloader.cli --url "https://example.com/playlist.m3u8" --out "video.mp4"
 ```
 
 #### Interactive Mode (Web Capture)
 ```bash
 # Interactive mode with page URL prompt
-python -m videodownloader.cli --interactive
+python -m hlsdownloader.cli --interactive
 
 # Force interactive mode with specific page
-python -m videodownloader.cli --url "https://example.com/video-page" --interactive
+python -m hlsdownloader.cli --url "https://example.com/video-page" --interactive
 ```
 
 #### Advanced Options
 ```bash
 # With authentication
-python -m videodownloader.cli --url "URL" --cookies "session=abc123"
+python -m hlsdownloader.cli --url "URL" --cookies "session=abc123"
 
 # Custom headers
-python -m videodownloader.cli --url "URL" --ua "Custom-Agent" --ref "https://example.com"
+python -m hlsdownloader.cli --url "URL" --ua "Custom-Agent" --ref "https://example.com"
 
 # Keep original TS format
-python -m videodownloader.cli --url "URL" --no-remux
+python -m hlsdownloader.cli --url "URL" --no-remux
 ```
 
 ### CLI Options
@@ -125,10 +127,10 @@ python -m videodownloader.cli --url "URL" --no-remux
 ## Project Structure
 
 ```
-VideoDownloader/
+HLS-Downloader/
 ├── requirements.txt        # Dependencies
 ├── downloads/              # Default output directory
-└── videodownloader/        # Main package
+└── hlsdownloader/          # Main package
     ├── gui.py              # PyQt5 interface
     ├── cli.py              # Command-line interface
     ├── capture.py          # Web capture functionality
@@ -220,9 +222,9 @@ The project includes GitHub Actions workflows for automated builds:
 3. GitHub Actions automatically builds and creates a release with branded executables
 
 #### Build Matrix
-- **Windows**: `VideoDownloader-windows-x64.exe` (with custom icon)
-- **macOS Intel**: `VideoDownloader-macos-x64.app` (with custom icon and bundle)
-- **macOS Apple Silicon**: `VideoDownloader-macos-arm64.app` (native ARM64 with custom icon)
+- **Windows**: `HLS-Downloader-windows-x64.exe` (with custom icon)
+- **macOS Intel**: `HLS-Downloader-macos-x64.app` (with custom icon and bundle)
+- **macOS Apple Silicon**: `HLS-Downloader-macos-arm64.app` (native ARM64 with custom icon)
 
 ### Build Features
 - **Custom Branding**: Application icons embedded in all builds

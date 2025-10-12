@@ -178,7 +178,7 @@ def select_resolution_interactive(captured_items):
 
 
 def build_argparser():
-    p = argparse.ArgumentParser(description="Authorized Video Downloader (HTTP/HLS)")
+    p = argparse.ArgumentParser(description="HLS Downloader - Download HLS streams and media files")
     p.add_argument("--url", help="Source URL (direct media or .m3u8) - if not provided, interactive mode will be used")
     p.add_argument("--interactive", "-i", action="store_true", help="Force interactive mode (capture from page)")
     p.add_argument("--out", default=str(Path.cwd() / "downloads" / "output.mp4"), help="Output file path")
@@ -209,7 +209,7 @@ def main():
     use_interactive = args.interactive or not args.url
     
     if use_interactive:
-        print("=== Interactive Video Downloader ===")
+        print("=== Interactive HLS Downloader ===")
         
         page_url = get_page_url()
         ua = get_user_agent()

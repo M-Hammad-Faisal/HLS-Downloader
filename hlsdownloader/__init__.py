@@ -1,4 +1,4 @@
-"""videodownloader package: modular HTTP/HLS downloader and GUI."""
+"""HLS Downloader package: modular HTTP/HLS downloader and GUI."""
 
 __all__ = [
     "hls",

@@ -14,7 +14,7 @@ import argparse
 import subprocess
 from pathlib import Path
 
-from videodownloader.capture import capture_media
+from hlsdownloader.capture import capture_media
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "

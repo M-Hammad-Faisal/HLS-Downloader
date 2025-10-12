@@ -72,10 +72,10 @@ jobs:
         # Base arguments for PyInstaller
         args = [
             'main.py',
-            '--name=VideoDownloader',
+            '--name=HLS Downloader',
             '--windowed',
             '--onefile',
-            '--add-data=videodownloader:videodownloader',
+            '--add-data=hlsdownloader:hlsdownloader',
             '--hidden-import=PyQt5.QtCore',
             '--hidden-import=PyQt5.QtGui',
             '--hidden-import=PyQt5.QtWidgets',
@@ -95,7 +95,7 @@ jobs:
         elif platform == "macos":
             args.extend([
                 '--icon=assets/icon.icns' if os.path.exists('assets/icon.icns') else '',
-                '--osx-bundle-identifier=com.videodownloader.app',
+                '--osx-bundle-identifier=com.hlsdownloader.app',
             ])
         
         # Remove empty strings
@@ -115,15 +115,15 @@ jobs:
       run: |
         mkdir -p release
         if [ "${{ runner.os }}" == "Windows" ]; then
-          cp dist/VideoDownloader.exe release/VideoDownloader-${{ matrix.platform }}-${{ matrix.arch }}.exe
+          cp "dist/HLS Downloader.exe" "release/HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}.exe"
         else
-          cp dist/VideoDownloader release/VideoDownloader-${{ matrix.platform }}-${{ matrix.arch }}
+          cp "dist/HLS Downloader" "release/HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}"
         fi
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: VideoDownloader-${{ matrix.platform }}-${{ matrix.arch }}
+        name: HLS-Downloader-${{ matrix.platform }}-${{ matrix.arch }}
         path: release/
         retention-days: 30
 

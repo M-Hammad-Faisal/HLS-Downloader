@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Launcher for the PyQt5 GUI application."""
+"""Launcher for the HLS Downloader PyQt5 GUI application."""
 
-from videodownloader.gui import main as run_gui
+from hlsdownloader.gui import main as run_gui
 
 
 def main():
-    """Launch the PyQt5 GUI application."""
+    """Launch the HLS Downloader PyQt5 GUI application."""
     run_gui()
 
 
