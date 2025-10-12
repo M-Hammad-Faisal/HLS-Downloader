@@ -271,8 +271,8 @@ class MainWindow(QtWidgets.QWidget):
         
         # Capture options
         row_opts = QtWidgets.QHBoxLayout()
-        self.headless_cb = QtWidgets.QCheckBox("Headless")
-        self.headless_cb.setChecked(False)
+        self.headless_cb = QtWidgets.QCheckBox("Show Browser (uncheck for background capture)")
+        self.headless_cb.setChecked(False)  # Default to headless (background) capture
         row_opts.addWidget(self.headless_cb)
         
         # Set default timeout internally (60 seconds)
@@ -745,7 +745,9 @@ class MainWindow(QtWidgets.QWidget):
 
         # Run capture in a thread
         self.btn_capture.setEnabled(False)
-        self.cap_worker = CaptureWorker(page_url, headers, self.headless_cb.isChecked(), self.cap_timeout.value())
+        # Invert the checkbox logic: unchecked = headless (background), checked = show browser
+        headless_mode = not self.headless_cb.isChecked()
+        self.cap_worker = CaptureWorker(page_url, headers, headless_mode, self.cap_timeout.value())
         self.cap_worker.captured.connect(self._on_captured)
         self.cap_worker.error.connect(self._on_capture_err)
         self.cap_worker.start()

@@ -21,35 +21,46 @@ DEFAULT_UA = (
 def ensure_playwright_browsers():
     """Ensure Playwright browsers are installed, install if missing."""
     try:
-        # Check if chromium is available
+        # Quick check if chromium is available
         with sync_playwright() as pw:
             try:
                 # Try to get browser executable path
                 browser_type = pw.chromium
                 executable_path = browser_type.executable_path
                 if executable_path and os.path.exists(executable_path):
+                    # Browser is already installed and working
                     return True
             except Exception:
                 pass
         
         # If we get here, browsers need to be installed
-        print("🔄 Installing Playwright browsers (first-time setup)...")
-        print("This may take a few minutes...")
+        print("\n" + "="*60)
+        print("🔄 FIRST-TIME SETUP: Installing Playwright browsers...")
+        print("📦 This downloads Chromium browser (~100MB) for web capture")
+        print("⏱️  This is a ONE-TIME setup and may take 2-5 minutes")
+        print("💾 Browsers will be cached for future use")
+        print("="*60)
         
-        # Install chromium browser
+        # Install chromium browser with progress indication
+        print("🌐 Downloading Chromium browser...")
         result = subprocess.run([
             sys.executable, "-m", "playwright", "install", "chromium"
         ], capture_output=True, text=True, check=False)
         
         if result.returncode == 0:
-            print("✅ Playwright browsers installed successfully!")
+            print("✅ Browser installation completed successfully!")
+            print("🚀 You're all set! Future captures will be much faster.")
+            print("="*60 + "\n")
             return True
         else:
             print(f"❌ Failed to install browsers: {result.stderr}")
+            print("💡 Try running: python -m playwright install chromium")
+            print("="*60 + "\n")
             return False
             
     except Exception as e:
         print(f"❌ Browser installation error: {e}")
+        print("💡 Try running: python -m playwright install chromium")
         return False
 
 
