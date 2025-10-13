@@ -271,7 +271,7 @@ class MainWindow(QtWidgets.QWidget):
         
         # Capture options
         row_opts = QtWidgets.QHBoxLayout()
-        self.headless_cb = QtWidgets.QCheckBox("Show Browser (uncheck for background capture)")
+        self.headless_cb = QtWidgets.QCheckBox("Show Browser")
         self.headless_cb.setChecked(False)  # Default to headless (background) capture
         row_opts.addWidget(self.headless_cb)
         

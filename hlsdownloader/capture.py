@@ -5,9 +5,6 @@ Requires: playwright (pip install playwright; then playwright install chromium)
 Only for authorized, NON-DRM sources.
 """
 
-import os
-import sys
-import subprocess
 from typing import List, Optional, Dict, Tuple
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
@@ -16,52 +13,6 @@ DEFAULT_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chromium/124.0.0.0 Safari/537.36"
 )
-
-
-def ensure_playwright_browsers():
-    """Ensure Playwright browsers are installed, install if missing."""
-    try:
-        # Quick check if chromium is available
-        with sync_playwright() as pw:
-            try:
-                # Try to get browser executable path
-                browser_type = pw.chromium
-                executable_path = browser_type.executable_path
-                if executable_path and os.path.exists(executable_path):
-                    # Browser is already installed and working
-                    return True
-            except Exception:
-                pass
-        
-        # If we get here, browsers need to be installed
-        print("\n" + "="*60)
-        print("🔄 FIRST-TIME SETUP: Installing Playwright browsers...")
-        print("📦 This downloads Chromium browser (~100MB) for web capture")
-        print("⏱️  This is a ONE-TIME setup and may take 2-5 minutes")
-        print("💾 Browsers will be cached for future use")
-        print("="*60)
-        
-        # Install chromium browser with progress indication
-        print("🌐 Downloading Chromium browser...")
-        result = subprocess.run([
-            sys.executable, "-m", "playwright", "install", "chromium"
-        ], capture_output=True, text=True, check=False)
-        
-        if result.returncode == 0:
-            print("✅ Browser installation completed successfully!")
-            print("🚀 You're all set! Future captures will be much faster.")
-            print("="*60 + "\n")
-            return True
-        else:
-            print(f"❌ Failed to install browsers: {result.stderr}")
-            print("💡 Try running: python -m playwright install chromium")
-            print("="*60 + "\n")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Browser installation error: {e}")
-        print("💡 Try running: python -m playwright install chromium")
-        return False
 
 
 def capture_m3u8(
@@ -73,10 +24,6 @@ def capture_m3u8(
     verbose: bool = True,
 ) -> List[str]:
     """Legacy helper function to capture M3U8 URLs from a web page."""
-    # Ensure browsers are installed
-    if not ensure_playwright_browsers():
-        raise RuntimeError("Failed to install Playwright browsers")
-    
     found: List[str] = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=headless)
@@ -120,10 +67,6 @@ def capture_media(
     include_m3u8_body: bool = False,
 ) -> Tuple[List[dict], str]:
     """Capture media-related requests and responses from a web page."""
-    # Ensure browsers are installed
-    if not ensure_playwright_browsers():
-        raise RuntimeError("Failed to install Playwright browsers")
-    
     found: List[dict] = []
     page_media_counts: Dict[object, int] = {}
     eff_headers = dict(headers or {})
