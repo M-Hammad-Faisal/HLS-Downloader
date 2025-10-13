@@ -22,6 +22,9 @@ build_bundle/
 dist_bundle/
 release_assets/
 
+# Playwright browsers (downloaded during build)
+pw-browsers/
+
 # Local env/config  
 .env
 *.local

@@ -17,7 +17,7 @@ from datetime import datetime
 
 class ReleasePreparator:
     def __init__(self):
-        self.version = "1.0.0"
+        self.version = "2.0.3"
         self.app_name = "HLS-Video-Downloader"
         self.current_dir = Path.cwd()
         self.release_dir = self.current_dir / "release_assets"
@@ -123,9 +123,44 @@ class ReleasePreparator:
         
         return archive_path
     
+    def install_playwright_browsers(self):
+        """Install Playwright browsers to local pw-browsers directory."""
+        self.log("Installing Playwright browsers for bundling...")
+        
+        browsers_dir = self.current_dir / "pw-browsers"
+        
+        # Remove existing browsers directory if it exists
+        if browsers_dir.exists():
+            shutil.rmtree(browsers_dir)
+        
+        # Set environment variable to install browsers in local directory
+        env = os.environ.copy()
+        env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir)
+        
+        try:
+            # Install only Chromium to keep bundle size reasonable (~280MB vs ~650MB for all browsers)
+            cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
+            subprocess.run(cmd, check=True, env=env, cwd=self.current_dir)
+            self.log(f"Successfully installed Playwright browsers to {browsers_dir}")
+            
+            # Verify installation
+            if not browsers_dir.exists():
+                raise RuntimeError("Playwright browsers directory was not created")
+                
+            # Log browser directory size for reference
+            total_size = sum(f.stat().st_size for f in browsers_dir.rglob('*') if f.is_file())
+            size_mb = total_size / (1024 * 1024)
+            self.log(f"Playwright browsers directory size: {size_mb:.1f} MB")
+            
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to install Playwright browsers: {e}")
+
     def build_executable(self, target_platform):
         """Build standalone executable using PyInstaller."""
         self.log(f"Building standalone executable for {target_platform}...")
+        
+        # Install Playwright browsers first
+        self.install_playwright_browsers()
         
         platform_config = self.platforms[target_platform]
         
@@ -137,13 +172,17 @@ class ReleasePreparator:
         if build_dir.exists():
             shutil.rmtree(build_dir)
         
+        # Determine path separator for --add-data (OS-specific)
+        path_sep = ";" if target_platform == "windows" else ":"
+        
         # PyInstaller command
         cmd = [
             sys.executable, "-m", "PyInstaller",
             "--onedir",  # Create a one-folder bundle
             "--windowed" if target_platform in ["windows", "darwin"] else "--console",
             "--name", platform_config["executable_name"].replace(".exe", "").replace(".app", ""),
-            "--add-data", f"{self.current_dir / 'assets'}:assets",
+            "--add-data", f"{self.current_dir / 'assets'}{path_sep}assets",
+            # Note: We'll copy pw-browsers manually after PyInstaller to avoid binary processing issues
             "--hidden-import", "hlsdownloader",
             "--hidden-import", "hlsdownloader.gui",
             "--hidden-import", "hlsdownloader.cli",
@@ -151,6 +190,9 @@ class ReleasePreparator:
             "--hidden-import", "hlsdownloader.capture",
             "--hidden-import", "hlsdownloader.http_dl",
             "--hidden-import", "hlsdownloader.utils",
+            "--hidden-import", "playwright._impl._driver",
+            "--hidden-import", "playwright._impl._transport",
+            "--hidden-import", "playwright._impl._connection",
             "--clean",
             str(self.current_dir / "main.py")
         ]
@@ -173,8 +215,36 @@ class ReleasePreparator:
         try:
             subprocess.run(cmd, check=True, cwd=self.current_dir)
             self.log(f"Successfully built executable for {target_platform}")
+            
+            # Manually copy pw-browsers directory to avoid PyInstaller binary processing issues
+            self.copy_browsers_to_dist(target_platform)
+            
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to build executable: {e}")
+    
+    def copy_browsers_to_dist(self, target_platform):
+        """Manually copy pw-browsers directory to the distribution folder."""
+        self.log("Copying Playwright browsers to distribution folder...")
+        
+        platform_config = self.platforms[target_platform]
+        app_name = platform_config["executable_name"].replace(".exe", "").replace(".app", "")
+        
+        # Find the distribution directory
+        dist_dir = self.current_dir / "dist" / app_name
+        if not dist_dir.exists():
+            raise RuntimeError(f"Distribution directory not found: {dist_dir}")
+        
+        # Copy pw-browsers directory
+        src_browsers = self.current_dir / "pw-browsers"
+        dst_browsers = dist_dir / "pw-browsers"
+        
+        if src_browsers.exists():
+            if dst_browsers.exists():
+                shutil.rmtree(dst_browsers)
+            shutil.copytree(src_browsers, dst_browsers)
+            self.log(f"Successfully copied Playwright browsers to {dst_browsers}")
+        else:
+            self.log("Warning: pw-browsers directory not found, skipping browser copy")
     
     def create_launcher_scripts(self, bundle_dir, platform, exe_name):
         """Create simple launcher scripts for standalone executables."""

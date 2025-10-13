@@ -70,6 +70,25 @@ jobs:
           libxcb-xinerama0 \
           libxcb-xfixes0
 
+    - name: Install Python dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Install Playwright system dependencies
+      run: |
+        # Install additional dependencies for Playwright browsers
+        sudo apt-get install -y \
+          libnss3 \
+          libnspr4 \
+          libatk-bridge2.0-0 \
+          libdrm2 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxrandr2 \
+          libgbm1 \
+          libxss1 \
+          libasound2
+
     - name: Generate release bundles
       run: |
         export QT_QPA_PLATFORM=offscreen
