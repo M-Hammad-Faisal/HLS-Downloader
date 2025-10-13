@@ -35,14 +35,14 @@ class InstallerBuilder:
         # Check for PyInstaller
         try:
             import PyInstaller
-            self.print_status("PyInstaller found ✓", "SUCCESS")
+            self.print_status("PyInstaller found", "SUCCESS")
         except ImportError:
             self.print_status("Installing PyInstaller...", "WARNING")
             subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
         
         # Check for UPX (optional, for compression)
         if shutil.which("upx"):
-            self.print_status("UPX found - will compress executables ✓", "SUCCESS")
+            self.print_status("UPX found - will compress executables", "SUCCESS")
             self.use_upx = True
         else:
             self.print_status("UPX not found - executables will be larger", "WARNING")
@@ -110,7 +110,7 @@ exe = EXE(
         # Clean up
         spec_file.unlink()
         
-        self.print_status("Python installer executable built ✓", "SUCCESS")
+        self.print_status("Python installer executable built", "SUCCESS")
     
     def create_windows_installer(self):
         """Create Windows installer executable"""
@@ -126,7 +126,7 @@ exe = EXE(
         batch_dest = self.dist_dir / "HLS-Downloader-Installer-Windows.bat"
         shutil.copy2(batch_source, batch_dest)
         
-        self.print_status("Windows batch installer created ✓", "SUCCESS")
+        self.print_status("Windows batch installer created", "SUCCESS")
         self.print_status("Note: Use Bat2Exe or similar to convert to .exe", "INFO")
     
     def create_macos_installer(self):
@@ -180,7 +180,7 @@ exe = EXE(
         with open(plist_path, 'w') as f:
             f.write(plist_content)
         
-        self.print_status("macOS installer app created ✓", "SUCCESS")
+        self.print_status("macOS installer app created", "SUCCESS")
     
     def create_linux_installer(self):
         """Create Linux installer"""
@@ -192,7 +192,7 @@ exe = EXE(
         shutil.copy2(shell_source, shell_dest)
         os.chmod(shell_dest, 0o755)
         
-        self.print_status("Linux installer script created ✓", "SUCCESS")
+        self.print_status("Linux installer script created", "SUCCESS")
     
     def create_readme(self):
         """Create README for installers"""
@@ -284,11 +284,11 @@ For issues, visit: https://github.com/M-Hammad-Faisal/HLS-Downloader/issues
         with open(readme_path, 'w') as f:
             f.write(readme_content)
         
-        self.print_status("README created ✓", "SUCCESS")
+        self.print_status("README created", "SUCCESS")
     
     def build_all(self):
         """Build all installers"""
-        self.print_status("🚀 Building HLS Downloader Smart Installers...", "INFO")
+        self.print_status("Building HLS Downloader Smart Installers...", "INFO")
         
         # Create dist directory
         self.dist_dir.mkdir(exist_ok=True)
@@ -308,7 +308,7 @@ For issues, visit: https://github.com/M-Hammad-Faisal/HLS-Downloader/issues
         self.create_readme()
         
         # Show results
-        self.print_status("🎉 All installers built successfully!", "SUCCESS")
+        self.print_status("All installers built successfully!", "SUCCESS")
         self.print_status(f"Installers available in: {self.dist_dir}", "INFO")
         
         # List created files

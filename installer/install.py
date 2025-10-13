@@ -52,7 +52,7 @@ class HLSDownloaderInstaller:
             # Check current Python version
             version = sys.version_info
             if version.major >= 3 and version.minor >= 8:
-                self.print_status(f"Python {version.major}.{version.minor} found ✓", "SUCCESS")
+                self.print_status(f"Python {version.major}.{version.minor} found", "SUCCESS")
                 return sys.executable
         except:
             pass
@@ -66,7 +66,7 @@ class HLSDownloaderInstaller:
                     version_str = result.stdout.split()[1]
                     major, minor = map(int, version_str.split('.')[:2])
                     if major >= 3 and minor >= 8:
-                        self.print_status(f"Python {version_str} found ✓", "SUCCESS")
+                        self.print_status(f"Python {version_str} found", "SUCCESS")
                         return shutil.which(cmd)
             except:
                 continue
@@ -118,7 +118,7 @@ class HLSDownloaderInstaller:
             python_exe = python_dir / "python.exe"
             subprocess.run([str(python_exe), str(get_pip)], check=True)
             
-            self.print_status("Portable Python installed ✓", "SUCCESS")
+            self.print_status("Portable Python installed", "SUCCESS")
             return str(python_exe)
         
         elif self.system == "darwin":
@@ -169,7 +169,7 @@ class HLSDownloaderInstaller:
         
         for path in browser_paths.get(self.system, []):
             if os.path.exists(path):
-                self.print_status(f"Found browser: {path} ✓", "SUCCESS")
+                self.print_status(f"Found browser: {path}", "SUCCESS")
                 return path
         
         self.print_status("No system browser found. Will install Chromium...", "WARNING")
@@ -206,7 +206,7 @@ class HLSDownloaderInstaller:
             extracted_folder.rmdir()
         
         repo_zip.unlink()  # Remove zip file
-        self.print_status("Repository downloaded ✓", "SUCCESS")
+        self.print_status("Repository downloaded", "SUCCESS")
     
     def setup_environment(self, python_exe):
         """Set up Python virtual environment and install dependencies"""
@@ -236,7 +236,7 @@ class HLSDownloaderInstaller:
         subprocess.run([str(venv_pip), "install", "playwright"], check=True)
         subprocess.run([str(venv_python), "-m", "playwright", "install", "chromium"], check=True)
         
-        self.print_status("Environment setup complete ✓", "SUCCESS")
+        self.print_status("Environment setup complete", "SUCCESS")
         return str(venv_python)
     
     def create_launcher(self, python_exe):
@@ -288,7 +288,7 @@ cd "{self.install_dir}"
             # Create desktop entry
             self.create_linux_desktop_entry(launcher_path)
         
-        self.print_status("Launcher created ✓", "SUCCESS")
+        self.print_status("Launcher created", "SUCCESS")
     
     def create_macos_app(self, python_exe):
         """Create macOS app bundle"""
@@ -362,7 +362,7 @@ Categories=AudioVideo;Network;
     
     def install(self):
         """Main installation process"""
-        self.print_status("🚀 Starting HLS Downloader installation...", "INFO")
+        self.print_status("Starting HLS Downloader installation...", "INFO")
         self.print_status(f"Installing to: {self.install_dir}", "INFO")
         
         # Check if installation directory exists and ask for clean install
@@ -386,7 +386,7 @@ Categories=AudioVideo;Network;
             # Step 5: Create launcher
             self.create_launcher(venv_python)
             
-            self.print_status("🎉 Installation completed successfully!", "SUCCESS")
+            self.print_status("Installation completed successfully!", "SUCCESS")
             self.print_status(f"HLS Downloader is installed in: {self.install_dir}", "INFO")
             
             if self.system == "windows":
