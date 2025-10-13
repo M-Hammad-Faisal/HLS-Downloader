@@ -66,8 +66,8 @@ jobs:
     # Install Playwright browsers and create installer with pw-browsers
     - name: Create installer with pw-browsers
       run: |
-        # Install Playwright browsers
-        playwright install
+        # Install only Chromium browsers to reduce size (no Firefox, WebKit)
+        playwright install chromium
         
         # Set display for Linux
         if [ "${{ matrix.platform }}" = "linux" ]; then
@@ -76,16 +76,23 @@ jobs:
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
         fi
         
-        # Create executable with PyInstaller
+        # Create executable with optimized PyInstaller spec
         if [ "${{ matrix.platform }}" = "macos" ]; then
-          pyinstaller --onedir --windowed \
-            --name "HLS Downloader" \
-            --icon assets/icon.icns \
-            main.py
+          pyinstaller hls_downloader_optimized.spec
+          
+          # Ad-hoc sign the macOS app to reduce security warnings
+          codesign --force --deep --sign - "dist/HLS Downloader.app"
         else
           pyinstaller --onedir --windowed \
             --name "HLS Downloader" \
             --icon assets/icon.ico \
+            --exclude-module tkinter \
+            --exclude-module unittest \
+            --exclude-module test \
+            --exclude-module distutils \
+            --exclude-module setuptools \
+            --strip \
+            --upx-dir /usr/bin \
             main.py
         fi
         

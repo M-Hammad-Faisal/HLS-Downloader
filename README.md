@@ -155,6 +155,18 @@ Settings are saved in `hls_gui_settings.ini`:
 **Permission errors**: Ensure write access to output directory
 **GUI issues**: Verify PyQt5 installation
 
+### macOS Security Warning
+If you see "Apple could not verify 'HLS Downloader' is free of malware", follow these steps:
+
+1. **Right-click method**: Right-click the app → "Open" → "Open" in the dialog
+2. **System Settings method**: 
+   - Go to System Settings → Privacy & Security
+   - Scroll down to "Security" section
+   - Click "Open Anyway" next to the blocked app message
+3. **Terminal method**: Run `xattr -d com.apple.quarantine "/path/to/HLS Downloader.app"`
+
+This warning appears because the app is not signed with an Apple Developer certificate. The app is safe to use.
+
 ### Debug Mode
 Use `--no-headless` to see browser interactions and check console output for errors.
 
