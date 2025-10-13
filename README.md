@@ -1,26 +1,73 @@
-# HLS Downloader
+# HLS Video Downloader
 
-![HLS Downloader](assets/HLS%20Downloader.png)
+A powerful Python application for downloading HLS (HTTP Live Streaming) video streams with a modern GUI interface.
 
-A comprehensive Python application for downloading HLS (HTTP Live Streaming) video streams and media files. Provides both GUI and CLI interfaces for capturing and downloading video content from web pages.
+## 🚀 Smart Installers Available!
+
+**New lightweight installers (~5-10MB) that set up everything automatically!**
+
+### Why Choose Smart Installers?
+- 🎯 **Tiny Download**: 5-10MB vs 800MB+ bundled apps (98% smaller!)
+- 🔄 **Always Updated**: Downloads the latest version automatically
+- 🧠 **Smart Setup**: Detects existing Python/browsers on your system
+- ⚡ **Fast Installation**: Sets up in minutes, not hours
+- 🌍 **Cross-Platform**: Works on Windows, macOS, and Linux
+
+### Download Smart Installer
+
+Choose your platform from the [Latest Release](https://github.com/M-Hammad-Faisal/HLS-Downloader/releases/latest):
+
+- **Windows**: `HLS-Downloader-Installer-Windows.exe` (~7MB)
+- **macOS**: `HLS-Downloader-Installer-macOS.tar.gz` (~8MB)  
+- **Linux**: `HLS-Downloader-Installer-Linux.sh` (~4KB)
+
+**Requirements**: Internet connection, ~200MB disk space, Python 3.8+ (installer will guide you if missing)
 
 ## Features
 
-- **HLS Stream Downloading**: Download .m3u8 streams with automatic quality selection
-- **Encrypted Stream Support**: AES-128 decryption with automatic key handling
-- **Web Capture**: Intercept media URLs from web pages using browser automation
-- **Dual Interface**: Modern PyQt5 GUI and command-line interface
-- **Concurrent Downloads**: Multi-threaded segment downloading for faster speeds
-- **Format Support**: Automatic MP4 remuxing with FFmpeg
-- **Authentication**: Custom headers, cookies, and User-Agent support
+- **Modern GUI Interface**: Clean and intuitive user interface built with Tkinter
+- **HLS Stream Support**: Download video streams from HLS (.m3u8) URLs
+- **Quality Selection**: Choose from available video qualities
+- **Progress Tracking**: Real-time download progress with speed indicators
+- **Batch Downloads**: Queue multiple downloads
+- **Resume Support**: Resume interrupted downloads
+- **Cross-Platform**: Works on Windows, macOS, and Linux
 
-## Installation
+## Installation Options
 
-### Prerequisites
+### Option 1: Smart Installer (Recommended) 🌟
+
+**Tiny installers that set up everything automatically:**
+
+1. Download the installer for your platform from [Releases](https://github.com/M-Hammad-Faisal/HLS-Downloader/releases/latest)
+2. Run the installer (may need admin privileges)
+3. Follow the prompts - it will handle everything!
+
+The installer automatically:
+- Checks for Python and guides installation if needed
+- Downloads the latest HLS Downloader code
+- Sets up a virtual environment
+- Installs all dependencies
+- Downloads Chromium browser
+- Creates desktop shortcuts/launchers
+
+### Option 2: Pre-built Bundles (Legacy)
+
+Download the full bundled releases from the [Releases](https://github.com/M-Hammad-Faisal/HLS-Downloader/releases) page:
+
+- **Windows**: `HLS-Downloader-v2.0.4-windows.zip` (475 MB)
+- **macOS**: `HLS-Downloader-v2.0.4-macos.tar.gz` (800 MB)
+- **Linux**: `HLS-Downloader-v2.0.4-linux.tar.gz` (578 MB)
+
+All versions include bundled Playwright browsers - no additional setup required!
+
+### Option 3: Manual Installation
+
+#### Prerequisites
 - Python 3.7+
 - FFmpeg
 
-### Setup
+#### Setup
 ```bash
 pip install -r requirements.txt
 playwright install chromium

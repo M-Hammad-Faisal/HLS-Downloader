@@ -1,0 +1,248 @@
+name: Build Smart Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-installers:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact: HLS-Downloader-Installer-Windows.exe
+          - os: macos-latest
+            platform: macos
+            artifact: HLS-Downloader-Installer-macOS
+          - os: ubuntu-latest
+            platform: linux
+            artifact: HLS-Downloader-Installer-Linux.sh
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    - name: Install UPX (for compression)
+      if: matrix.platform != 'macos'
+      run: |
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          choco install upx
+        elif [ "${{ matrix.platform }}" = "linux" ]; then
+          sudo apt-get update
+          sudo apt-get install -y upx
+        fi
+      shell: bash
+
+    - name: Build installers
+      run: |
+        cd installer
+        python build_installers.py
+
+    - name: Prepare artifacts (Windows)
+      if: matrix.platform == 'windows'
+      run: |
+        cd installer/dist
+        # Rename the executable for Windows
+        if (Test-Path "HLS-Downloader-Installer.exe") {
+          Move-Item "HLS-Downloader-Installer.exe" "HLS-Downloader-Installer-Windows.exe"
+        } else {
+          Move-Item "HLS-Downloader-Installer" "HLS-Downloader-Installer-Windows.exe"
+        }
+      shell: powershell
+
+    - name: Prepare artifacts (macOS)
+      if: matrix.platform == 'macos'
+      run: |
+        cd installer/dist
+        # Create a compressed archive of the app bundle
+        tar -czf "HLS-Downloader-Installer-macOS.tar.gz" "HLS Downloader Installer.app"
+        # Also provide the standalone executable
+        cp "HLS-Downloader-Installer" "HLS-Downloader-Installer-macOS"
+
+    - name: Prepare artifacts (Linux)
+      if: matrix.platform == 'linux'
+      run: |
+        cd installer/dist
+        # Copy the shell script
+        cp "HLS-Downloader-Installer-Linux.sh" "HLS-Downloader-Installer-Linux.sh"
+        # Also provide the standalone executable
+        cp "HLS-Downloader-Installer" "HLS-Downloader-Installer-Linux"
+
+    - name: Upload Windows artifacts
+      if: matrix.platform == 'windows'
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-installer
+        path: |
+          installer/dist/HLS-Downloader-Installer-Windows.exe
+          installer/dist/HLS-Downloader-Installer-Windows.bat
+          installer/dist/README.md
+
+    - name: Upload macOS artifacts
+      if: matrix.platform == 'macos'
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-installer
+        path: |
+          installer/dist/HLS-Downloader-Installer-macOS.tar.gz
+          installer/dist/HLS-Downloader-Installer-macOS
+          installer/dist/HLS-Downloader-Installer-Linux.sh
+          installer/dist/README.md
+
+    - name: Upload Linux artifacts
+      if: matrix.platform == 'linux'
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-installer
+        path: |
+          installer/dist/HLS-Downloader-Installer-Linux.sh
+          installer/dist/HLS-Downloader-Installer-Linux
+          installer/dist/README.md
+
+  create-release:
+    needs: build-installers
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: HLS Downloader ${{ github.ref }}
+        body: |
+          ## HLS Downloader Smart Installers
+          
+          **Lightweight installers (~5-10MB) that download and set up everything automatically!**
+          
+          ### Why Smart Installers?
+          - 🚀 **Tiny Size**: 5-10MB vs 800MB+ bundled apps
+          - 🔄 **Always Updated**: Downloads latest version
+          - 🧠 **Smart Setup**: Detects existing Python/browsers
+          - 🌍 **Cross-Platform**: Works on Windows, macOS, and Linux
+          
+          ### Download for your platform:
+          
+          **Windows:**
+          - `HLS-Downloader-Installer-Windows.exe` - Compiled executable (recommended)
+          - `HLS-Downloader-Installer-Windows.bat` - Batch script
+          
+          **macOS:**
+          - `HLS-Downloader-Installer-macOS.tar.gz` - Native app bundle
+          - `HLS-Downloader-Installer-macOS` - Standalone executable
+          
+          **Linux:**
+          - `HLS-Downloader-Installer-Linux.sh` - Shell script (recommended)
+          - `HLS-Downloader-Installer-Linux` - Standalone executable
+          
+          ### Requirements
+          - Internet connection
+          - ~200MB disk space
+          - Python 3.8+ (installer will guide you if missing)
+          
+          ### Installation
+          1. Download the installer for your platform
+          2. Run it (may need admin/sudo for some operations)
+          3. Follow the prompts
+          4. Enjoy your lightweight HLS Downloader!
+          
+          The installer will automatically:
+          - Check for Python and guide installation if needed
+          - Download the latest HLS Downloader code
+          - Set up a virtual environment
+          - Install all dependencies
+          - Download Chromium browser
+          - Create desktop shortcuts/launchers
+        draft: false
+        prerelease: false
+
+    - name: Upload Windows Installer EXE
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: windows-installer/HLS-Downloader-Installer-Windows.exe
+        asset_name: HLS-Downloader-Installer-Windows.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows Installer BAT
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: windows-installer/HLS-Downloader-Installer-Windows.bat
+        asset_name: HLS-Downloader-Installer-Windows.bat
+        asset_content_type: text/plain
+
+    - name: Upload macOS Installer App
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: macos-installer/HLS-Downloader-Installer-macOS.tar.gz
+        asset_name: HLS-Downloader-Installer-macOS.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload macOS Installer Executable
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: macos-installer/HLS-Downloader-Installer-macOS
+        asset_name: HLS-Downloader-Installer-macOS
+        asset_content_type: application/octet-stream
+
+    - name: Upload Linux Installer Script
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: linux-installer/HLS-Downloader-Installer-Linux.sh
+        asset_name: HLS-Downloader-Installer-Linux.sh
+        asset_content_type: text/plain
+
+    - name: Upload Linux Installer Executable
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: linux-installer/HLS-Downloader-Installer-Linux
+        asset_name: HLS-Downloader-Installer-Linux
+        asset_content_type: application/octet-stream
+
+    - name: Upload README
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: linux-installer/README.md
+        asset_name: Installation-README.md
+        asset_content_type: text/markdown
