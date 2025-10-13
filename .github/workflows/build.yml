@@ -73,10 +73,17 @@ jobs:
         fi
         
         # Create executable with PyInstaller
-        pyinstaller --onedir --windowed \
-          --name "HLS Downloader" \
-          --icon assets/icon.ico \
-          main.py
+        if [ "${{ matrix.platform }}" = "macos" ]; then
+          pyinstaller --onedir --windowed \
+            --name "HLS Downloader" \
+            --icon assets/icon.icns \
+            main.py
+        else
+          pyinstaller --onedir --windowed \
+            --name "HLS Downloader" \
+            --icon assets/icon.ico \
+            main.py
+        fi
         
         # Copy Playwright browsers to the dist folder
         if [ -d "$HOME/.cache/ms-playwright" ]; then
