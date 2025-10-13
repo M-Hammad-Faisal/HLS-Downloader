@@ -27,29 +27,14 @@ playwright install chromium
 ```
 
 ### Development Setup
-For development with linting and formatting tools:
+For development with linting tools:
 
 ```bash
 # Install development dependencies
 pip install -r requirements-dev.txt
 
-# Install pre-commit hooks
-pre-commit install
-
-# Format code with Black
-black hlsdownloader/
-
-# Sort imports with isort
-isort hlsdownloader/
-
 # Run linting with flake8
 flake8 hlsdownloader/
-
-# Type checking with mypy
-mypy hlsdownloader/
-
-# Format JSON/YAML with Prettier (requires Node.js)
-npx prettier --write "*.json" "*.yml" "*.yaml"
 ```
 
 ## Usage
@@ -128,15 +113,20 @@ python -m hlsdownloader.cli --url "URL" --no-remux
 
 ```
 HLS-Downloader/
-├── requirements.txt        # Dependencies
+├── .github/workflows/      # CI/CD automation
+├── assets/                 # Application icons and images
 ├── downloads/              # Default output directory
-└── hlsdownloader/          # Main package
-    ├── gui.py              # PyQt5 interface
-    ├── cli.py              # Command-line interface
-    ├── capture.py          # Web capture functionality
-    ├── hls.py              # HLS processing
-    ├── http_dl.py          # HTTP downloads
-    └── utils.py            # Utilities
+├── hlsdownloader/          # Main package
+│   ├── gui.py              # PyQt5 interface
+│   ├── cli.py              # Command-line interface
+│   ├── capture.py          # Web capture functionality
+│   ├── hls.py              # HLS processing
+│   ├── http_dl.py          # HTTP downloads
+│   └── utils.py            # Utilities
+├── main.py                 # Entry point
+├── prepare_release.py      # Release automation
+├── requirements.txt        # Dependencies
+└── requirements-dev.txt    # Development dependencies
 ```
 
 ## Configuration
@@ -193,18 +183,12 @@ Build executable for your current platform:
 # Install build dependencies
 pip install -r requirements-dev.txt
 
-# Build executable (includes custom icons)
-make build
-
-# Clean build and rebuild
-make build-clean
-
-# View available build commands
-make help
+# Build cross-platform release bundles
+python prepare_release.py
 ```
 
 **Build Output:**
-- Built executables are placed in the `release/` directory
+- Built executables are placed in the `release_assets/` directory
 - Icons are automatically embedded in the executables
 - macOS builds create `.app` bundles with proper metadata
 
