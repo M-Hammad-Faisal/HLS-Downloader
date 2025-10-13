@@ -1,0 +1,156 @@
+name: Build and Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            ext: ""
+            archive: tar.gz
+          - os: windows-latest
+            platform: windows
+            ext: .exe
+            archive: zip
+          - os: macos-latest
+            platform: macos
+            ext: .app
+            archive: zip
+    
+    runs-on: ${{ matrix.os }}
+    
+    defaults:
+      run:
+        shell: bash
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    # Install system dependencies for Linux
+    - name: Install Linux dependencies
+      if: matrix.platform == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pyqt5 \
+          libasound2t64 \
+          xvfb
+
+    # Install Python dependencies
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flake8 black
+
+    # Run linting and formatting
+    - name: Lint and format code
+      run: |
+        black .
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    # Install Playwright browsers and create installer with pw-browsers
+    - name: Create installer with pw-browsers
+      run: |
+        # Install only Chromium browsers to reduce size (no Firefox, WebKit)
+        playwright install chromium
+        
+        # Set display for Linux
+        if [ "${{ matrix.platform }}" = "linux" ]; then
+          export QT_QPA_PLATFORM=offscreen
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        fi
+        
+        # Create executable with optimized PyInstaller spec
+        if [ "${{ matrix.platform }}" = "macos" ]; then
+          pyinstaller hls_downloader_optimized.spec
+          
+          # Ad-hoc sign the macOS app to reduce security warnings
+          codesign --force --deep --sign - "dist/HLS Downloader.app"
+        else
+          pyinstaller --onedir --windowed \
+            --name "HLS Downloader" \
+            --icon assets/icon.ico \
+            --exclude-module tkinter \
+            --exclude-module unittest \
+            --exclude-module test \
+            --exclude-module distutils \
+            --exclude-module setuptools \
+            --strip \
+            --upx-dir /usr/bin \
+            main.py
+        fi
+        
+        # Copy Playwright browsers to the dist folder
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          if [ -d "$USERPROFILE/AppData/Local/ms-playwright" ]; then
+            cp -r "$USERPROFILE/AppData/Local/ms-playwright" "dist/HLS Downloader/pw-browsers"
+          fi
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          if [ -d "$HOME/Library/Caches/ms-playwright" ]; then
+            cp -r "$HOME/Library/Caches/ms-playwright" "dist/HLS Downloader/pw-browsers"
+          fi
+        else
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            cp -r "$HOME/.cache/ms-playwright" "dist/HLS Downloader/pw-browsers"
+          fi
+        fi
+        
+        # Create archive
+        cd dist
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          7z a "../HLS-Downloader-${{ github.ref_name }}-${{ matrix.platform }}.zip" "HLS Downloader/"
+        else
+          tar -czf "../HLS-Downloader-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz" "HLS Downloader/"
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: HLS-Downloader-${{ matrix.platform }}
+        path: HLS-Downloader-${{ github.ref_name }}-${{ matrix.platform }}.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          HLS-Downloader-*/HLS-Downloader-*
+        body: |
+          ## HLS Video Downloader ${{ github.ref_name }}
+          
+          Download the appropriate version for your platform:
+          - **Windows**: `HLS-Downloader-${{ github.ref_name }}-windows.zip`
+          - **macOS**: `HLS-Downloader-${{ github.ref_name }}-macos.zip`  
+          - **Linux**: `HLS-Downloader-${{ github.ref_name }}-linux.tar.gz`
+          
+          All versions include bundled Playwright browsers - no additional setup required!
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
