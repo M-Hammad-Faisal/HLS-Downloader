@@ -13,7 +13,7 @@ except ImportError:
 
 class Variant:
     """HLS stream variant with bandwidth and resolution."""
-    
+
     def __init__(self, uri, bandwidth=None, resolution=None):
         self.uri = uri
         self.bandwidth = bandwidth
@@ -22,7 +22,7 @@ class Variant:
 
 class KeyInfo:
     """Encryption key information for HLS segments."""
-    
+
     def __init__(self, method="NONE", uri=None, iv=None):
         self.method = method
         self.uri = uri
@@ -31,7 +31,7 @@ class KeyInfo:
 
 class Segment:
     """HLS media segment with duration, encryption, and sequence."""
-    
+
     def __init__(self, uri, duration=None, key: KeyInfo = None, seq=None):
         self.uri = uri
         self.duration = duration
@@ -84,7 +84,9 @@ def parse_master_playlist(text: str, base_url: str):
                         resolution = (int(w), int(h))
                     except:
                         pass
-                variants.append(Variant(normalize_uri(base_url, line), bandwidth, resolution))
+                variants.append(
+                    Variant(normalize_uri(base_url, line), bandwidth, resolution)
+                )
                 attrs = {}
     return variants
 
@@ -123,8 +125,26 @@ def parse_media_playlist(text: str, base_url: str):
         elif line and not line.startswith("#"):
             seg_url = normalize_uri(base_url, line)
             lower = seg_url.lower()
-            non_media_exts = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".ico", ".css", ".js", ".html", ".txt")
-            is_media = (lower.endswith(".ts") or lower.endswith(".m4s") or lower.endswith(".mp4") or ".ts?" in lower or ".m4s?" in lower or ".mp4?" in lower)
+            non_media_exts = (
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".gif",
+                ".webp",
+                ".ico",
+                ".css",
+                ".js",
+                ".html",
+                ".txt",
+            )
+            is_media = (
+                lower.endswith(".ts")
+                or lower.endswith(".m4s")
+                or lower.endswith(".mp4")
+                or ".ts?" in lower
+                or ".m4s?" in lower
+                or ".mp4?" in lower
+            )
             if not is_media and any(lower.endswith(ext) for ext in non_media_exts):
                 continue
             segments.append(Segment(seg_url, duration=current_dur, key=key, seq=seq))
@@ -142,7 +162,10 @@ def select_variant(variants, want_res=None, want_bw=None):
         exact = [v for v in variants if v.resolution == (w, h)]
         if exact:
             return exact[0]
-        ordered = sorted(variants, key=lambda v: (v.resolution[1] if v.resolution else 0, v.bandwidth or 0))
+        ordered = sorted(
+            variants,
+            key=lambda v: (v.resolution[1] if v.resolution else 0, v.bandwidth or 0),
+        )
         best = None
         for v in ordered:
             if v.resolution and v.resolution[1] <= h:
@@ -156,7 +179,9 @@ def select_variant(variants, want_res=None, want_bw=None):
     return sorted(variants, key=lambda v: v.bandwidth or 0)[-1]
 
 
-async def download_segment(session, seg: Segment, headers, idx: int, temp_dir: Path, cancel_flag):
+async def download_segment(
+    session, seg: Segment, headers, idx: int, temp_dir: Path, cancel_flag
+):
     """Download a single HLS segment with optional AES-128 decryption."""
     if cancel_flag.is_set():
         return None
@@ -167,11 +192,17 @@ async def download_segment(session, seg: Segment, headers, idx: int, temp_dir: P
 
     if seg.key and seg.key.method and seg.key.method.upper() == "AES-128":
         if AES is None:
-            raise RuntimeError("Install pycryptodome for AES-128: pip install pycryptodome")
+            raise RuntimeError(
+                "Install pycryptodome for AES-128: pip install pycryptodome"
+            )
         if not seg.key.uri:
             raise RuntimeError("Key URI missing for AES-128 segment.")
         key_bytes = await fetch_bytes(session, seg.key.uri, headers)
-        iv = seg.key.iv or (seg.seq.to_bytes(16, "big") if seg.seq is not None else (0).to_bytes(16, "big"))
+        iv = seg.key.iv or (
+            seg.seq.to_bytes(16, "big")
+            if seg.seq is not None
+            else (0).to_bytes(16, "big")
+        )
         data = AES.new(key_bytes, AES.MODE_CBC, iv=iv).decrypt(data)
 
     with open(path, "wb") as f:
@@ -179,7 +210,16 @@ async def download_segment(session, seg: Segment, headers, idx: int, temp_dir: P
     return path
 
 
-async def download_all_segments(session, segments, headers, concurrency, temp_dir: Path, log_fn, progress_fn, cancel_flag):
+async def download_all_segments(
+    session,
+    segments,
+    headers,
+    concurrency,
+    temp_dir: Path,
+    log_fn,
+    progress_fn,
+    cancel_flag,
+):
     """Download all HLS segments concurrently with progress tracking."""
     sem = asyncio.Semaphore(concurrency)
     results = [None] * len(segments)
@@ -188,14 +228,16 @@ async def download_all_segments(session, segments, headers, concurrency, temp_di
         if cancel_flag.is_set():
             return
         async with sem:
-            results[i] = await download_segment(session, seg, headers, i, temp_dir, cancel_flag)
+            results[i] = await download_segment(
+                session, seg, headers, i, temp_dir, cancel_flag
+            )
             if cancel_flag.is_set():
                 return
             done = sum(1 for r in results if r is not None)
             progress_fn(done, len(segments))
 
     tasks = [asyncio.create_task(worker(i, s)) for i, s in enumerate(segments)]
-    
+
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
     except Exception:

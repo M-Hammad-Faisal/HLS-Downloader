@@ -29,18 +29,30 @@ DEFAULT_UA = (
 SETTINGS_PATH = Path.cwd() / "hls_gui_settings.ini"
 
 
-
 class HlsWorker(QtCore.QThread):
     """Worker thread for downloading HLS streams with progress tracking and cancellation support."""
-    
+
     log = QtCore.pyqtSignal(str)
     percent = QtCore.pyqtSignal(int)
     finished_ok = QtCore.pyqtSignal(str)
     finished_err = QtCore.pyqtSignal(str)
 
-    def __init__(self, url, out_path, res_text, bw, ua, ref, cookies, conc, remux, resource_type_hint=None, auth_hint=None):
+    def __init__(
+        self,
+        url,
+        out_path,
+        res_text,
+        bw,
+        ua,
+        ref,
+        cookies,
+        conc,
+        remux,
+        resource_type_hint=None,
+        auth_hint=None,
+    ):
         """Initialize the HLS worker with download parameters.
-        
+
         Args:
             url: HLS playlist URL to download
             out_path: Output file path
@@ -92,13 +104,19 @@ class HlsWorker(QtCore.QThread):
             headers["Referer"] = self.ref
             try:
                 ref_o = urllib.parse.urlparse(self.ref)
-                origin = f"{ref_o.scheme}://{ref_o.netloc}" if ref_o.scheme and ref_o.netloc else None
+                origin = (
+                    f"{ref_o.scheme}://{ref_o.netloc}"
+                    if ref_o.scheme and ref_o.netloc
+                    else None
+                )
             except Exception:
                 origin = None
         else:
             try:
                 uo = urllib.parse.urlparse(self.url)
-                origin = f"{uo.scheme}://{uo.netloc}" if uo.scheme and uo.netloc else None
+                origin = (
+                    f"{uo.scheme}://{uo.netloc}" if uo.scheme and uo.netloc else None
+                )
             except Exception:
                 origin = None
         if origin:
@@ -112,7 +130,11 @@ class HlsWorker(QtCore.QThread):
         # Compute Sec-Fetch-Site based on origin vs target URL
         try:
             target = urllib.parse.urlparse(self.url)
-            site_val = "same-origin" if (origin and urllib.parse.urlparse(origin).netloc == target.netloc) else "cross-site"
+            site_val = (
+                "same-origin"
+                if (origin and urllib.parse.urlparse(origin).netloc == target.netloc)
+                else "cross-site"
+            )
         except Exception:
             site_val = "cross-site"
         headers.setdefault("Sec-Fetch-Site", site_val)
@@ -148,21 +170,27 @@ class HlsWorker(QtCore.QThread):
                     raise RuntimeError("No variants found in master playlist.")
                 want_res = parse_resolution(self.res_text) if self.res_text else None
                 chosen = select_variant(variants, want_res=want_res, want_bw=self.bw)
-                self.log.emit(f"Chosen: {chosen.resolution or 'unknown'} @ {chosen.bandwidth or 'n/a'} → {chosen.uri}")
+                self.log.emit(
+                    f"Chosen: {chosen.resolution or 'unknown'} @ {chosen.bandwidth or 'n/a'} → {chosen.uri}"
+                )
                 text = await fetch_text(session, chosen.uri, headers)
                 base = chosen.uri
             else:
                 self.log.emit("[2/5] Media playlist detected.")
 
             if "EXT-X-KEY" in text and "METHOD=SAMPLE-AES" in text:
-                raise RuntimeError("DRM detected (SAMPLE-AES). This app does not support DRM.")
+                raise RuntimeError(
+                    "DRM detected (SAMPLE-AES). This app does not support DRM."
+                )
 
             self.log.emit("[3/5] Parsing segments…")
             segments = parse_media_playlist(text, base)
             if not segments:
                 raise RuntimeError("No segments found in playlist.")
 
-            self.log.emit(f"[4/5] Downloading {len(segments)} segments (concurrency={self.conc})…")
+            self.log.emit(
+                f"[4/5] Downloading {len(segments)} segments (concurrency={self.conc})…"
+            )
             last_pct = -1
 
             def progress_fn(done, total_):
@@ -174,7 +202,16 @@ class HlsWorker(QtCore.QThread):
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 temp_dir = Path(tmpdir)
-                paths = await download_all_segments(session, segments, headers, self.conc, temp_dir, self.log.emit, progress_fn, self.cancel_flag)
+                paths = await download_all_segments(
+                    session,
+                    segments,
+                    headers,
+                    self.conc,
+                    temp_dir,
+                    self.log.emit,
+                    progress_fn,
+                    self.cancel_flag,
+                )
                 if self.cancel_flag.is_set():
                     self.finished_err.emit("Cancelled")
                     return
@@ -184,12 +221,20 @@ class HlsWorker(QtCore.QThread):
                 concat_ts(paths, merged_ts)
 
                 if self.remux:
-                    final_mp4 = self.out_path if self.out_path.suffix.lower() == ".mp4" else self.out_path.with_suffix(".mp4")
+                    final_mp4 = (
+                        self.out_path
+                        if self.out_path.suffix.lower() == ".mp4"
+                        else self.out_path.with_suffix(".mp4")
+                    )
                     remux_to_mp4(merged_ts, final_mp4, self.log.emit)
                     self.percent.emit(100)
                     self.finished_ok.emit(str(final_mp4))
                 else:
-                    final_ts = self.out_path if self.out_path.suffix.lower() == ".ts" else self.out_path.with_suffix(".ts")
+                    final_ts = (
+                        self.out_path
+                        if self.out_path.suffix.lower() == ".ts"
+                        else self.out_path.with_suffix(".ts")
+                    )
                     final_ts.write_bytes(merged_ts.read_bytes())
                     self.percent.emit(100)
                     self.finished_ok.emit(str(final_ts))
@@ -197,13 +242,15 @@ class HlsWorker(QtCore.QThread):
 
 class CaptureWorker(QtCore.QThread):
     """Worker thread for capturing media URLs from web pages using Playwright."""
-    
+
     captured = QtCore.pyqtSignal(list, str)
     error = QtCore.pyqtSignal(str)
 
-    def __init__(self, page_url: str, headers: dict, headless: bool, timeout_seconds: int = 30):
+    def __init__(
+        self, page_url: str, headers: dict, headless: bool, timeout_seconds: int = 30
+    ):
         """Initialize the capture worker with page parameters.
-        
+
         Args:
             page_url: URL of the web page to capture from
             headers: HTTP headers to use when loading the page
@@ -234,7 +281,7 @@ class CaptureWorker(QtCore.QThread):
 
 class MainWindow(QtWidgets.QWidget):
     """Main GUI window for the HLS downloader application."""
-    
+
     def __init__(self):
         """Initialize the main window with UI components and settings."""
         super().__init__()
@@ -251,10 +298,10 @@ class MainWindow(QtWidgets.QWidget):
     def _build_ui(self):
         """Build and layout the main user interface components in a single page layout."""
         L = QtWidgets.QVBoxLayout(self)
-        
+
         # Build all components in a single layout
         self._build_single_page_layout(L)
-        
+
         # Common controls at bottom
         self._build_common_controls(L)
 
@@ -268,43 +315,43 @@ class MainWindow(QtWidgets.QWidget):
         self.page_in.textChanged.connect(self._on_page_url_changed)
         row_pg.addWidget(self.page_in, 1)
         main_layout.addLayout(row_pg)
-        
+
         # Capture options
         row_opts = QtWidgets.QHBoxLayout()
         self.headless_cb = QtWidgets.QCheckBox("Show Browser")
         self.headless_cb.setChecked(False)  # Default to headless (background) capture
         row_opts.addWidget(self.headless_cb)
-        
+
         # Set default timeout internally (60 seconds)
         self.cap_timeout = QtWidgets.QSpinBox()
         self.cap_timeout.setValue(60)  # Hidden, default to 60 seconds
-        
+
         self.btn_capture = QtWidgets.QPushButton("Open & Capture")
         self.btn_capture.clicked.connect(self._start_capture)
         row_opts.addWidget(self.btn_capture)
         main_layout.addLayout(row_opts)
-        
+
         # Captured items list
         main_layout.addWidget(QtWidgets.QLabel("Captured Media:"))
         self.capture_list = QtWidgets.QListWidget()
         self.capture_list.setMinimumHeight(120)
         main_layout.addWidget(self.capture_list)
-        
+
         # Keep buttons as internal variables for backend functionality but don't add to UI
         self.btn_copy_selected = QtWidgets.QPushButton("Copy URL")
         self.btn_copy_selected.setEnabled(True)
         self.btn_copy_selected.clicked.connect(self._copy_selected_url)
         self.btn_copy_selected.setVisible(False)
-        
+
         self.btn_apply_headers = QtWidgets.QPushButton("Apply Headers")
         self.btn_apply_headers.setEnabled(True)
         self.btn_apply_headers.clicked.connect(self._apply_captured_headers)
         self.btn_apply_headers.setVisible(False)
-        
+
         # Resolution selection
         res_group = QtWidgets.QGroupBox("Resolution Selection")
         res_layout = QtWidgets.QVBoxLayout(res_group)
-        
+
         row_res = QtWidgets.QHBoxLayout()
         row_res.addWidget(QtWidgets.QLabel("Resolution:"))
         self.variant_combo = QtWidgets.QComboBox()
@@ -312,14 +359,14 @@ class MainWindow(QtWidgets.QWidget):
         self.variant_combo.currentIndexChanged.connect(self._on_resolution_selected)
         row_res.addWidget(self.variant_combo, 1)
         res_layout.addLayout(row_res)
-        
+
         self.btn_use_variant = QtWidgets.QPushButton("Use selected resolution")
         self.btn_use_variant.setEnabled(False)
         self.btn_use_variant.clicked.connect(self._use_selected_variant)
         self.btn_use_variant.setVisible(False)
-        
+
         main_layout.addWidget(res_group)
-        
+
         # Output file section
         row_out = QtWidgets.QHBoxLayout()
         row_out.addWidget(QtWidgets.QLabel("Output file:"))
@@ -329,33 +376,37 @@ class MainWindow(QtWidgets.QWidget):
         btn_browse.clicked.connect(self._choose_output)
         row_out.addWidget(btn_browse)
         main_layout.addLayout(row_out)
-        
+
         # Keep internal variables for headers and other settings but don't show UI fields
         self.url_in = QtWidgets.QLineEdit()  # Hidden, for internal use only
         self.ua_in = QtWidgets.QLineEdit()  # Hidden, will use defaults
-        self.ref_in = QtWidgets.QLineEdit()  # Hidden, will use defaults  
+        self.ref_in = QtWidgets.QLineEdit()  # Hidden, will use defaults
         self.cookies_in = QtWidgets.QLineEdit()  # Hidden, will use defaults
         self.conc_in = QtWidgets.QLineEdit("4")  # Hidden, hardcoded to 4
         self.remux_cb = QtWidgets.QCheckBox()  # Hidden, always enabled
         self.remux_cb.setChecked(True)
-        
+
         # Download button
-        self.btn_download_selected = QtWidgets.QPushButton("Download Selected Resolution")
+        self.btn_download_selected = QtWidgets.QPushButton(
+            "Download Selected Resolution"
+        )
         self.btn_download_selected.setEnabled(False)
         self.btn_download_selected.clicked.connect(self._download_selected)
         main_layout.addWidget(self.btn_download_selected)
-        
+
         # Alias for compatibility with existing code
         self.btn_start = self.btn_download_selected
-        
+
         # Remember inputs
         self.remember_cb = QtWidgets.QCheckBox("Remember inputs")
         self.remember_cb.setChecked(True)
         main_layout.addWidget(self.remember_cb)
-        
+
         # Double-click captured item to copy URL
         try:
-            self.capture_list.itemDoubleClicked.connect(lambda _: self._copy_selected_url())
+            self.capture_list.itemDoubleClicked.connect(
+                lambda _: self._copy_selected_url()
+            )
         except Exception:
             pass
 
@@ -366,23 +417,23 @@ class MainWindow(QtWidgets.QWidget):
         self.pbar.setRange(0, 100)
         self.pbar.setValue(0)
         main_layout.addWidget(self.pbar)
-        
+
         # Status
         self.status = QtWidgets.QLabel("Status: idle")
         main_layout.addWidget(self.status)
-        
+
         # Log (compact)
         self.log = QtWidgets.QTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumHeight(100)  # Limit height for 800x600
         main_layout.addWidget(self.log)
-        
+
         # Cancel button (for stopping ongoing downloads)
         self.btn_cancel = QtWidgets.QPushButton("Cancel Download")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel)
         main_layout.addWidget(self.btn_cancel)
-        
+
         note = QtWidgets.QLabel(
             "Use only for NON-DRM streams you are authorized to save."
         )
@@ -395,7 +446,7 @@ class MainWindow(QtWidgets.QWidget):
         current = self.out_in.text().strip()
         if not current:
             current = str(Path.cwd() / "downloads" / "output.mp4")
-        
+
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self, "Save As", current, "Video Files (*.mp4 *.ts);;All Files (*)"
         )
@@ -407,11 +458,15 @@ class MainWindow(QtWidgets.QWidget):
         try:
             idx = self.capture_list.currentRow()
             if idx < 0 or idx >= len(self.captured_items):
-                QtWidgets.QMessageBox.information(self, "Copy URL", "Select an item first.")
+                QtWidgets.QMessageBox.information(
+                    self, "Copy URL", "Select an item first."
+                )
                 return
             url = self.captured_items[idx].get("url") or ""
             if not url:
-                QtWidgets.QMessageBox.information(self, "Copy URL", "Selected item has no URL.")
+                QtWidgets.QMessageBox.information(
+                    self, "Copy URL", "Selected item has no URL."
+                )
                 return
             QtWidgets.QApplication.clipboard().setText(url)
             self.status.setText("Copied URL to clipboard")
@@ -423,20 +478,22 @@ class MainWindow(QtWidgets.QWidget):
         try:
             idx = self.capture_list.currentRow()
             if idx < 0 or idx >= len(self.captured_items):
-                QtWidgets.QMessageBox.information(self, "Apply Headers", "Select an item first.")
+                QtWidgets.QMessageBox.information(
+                    self, "Apply Headers", "Select an item first."
+                )
                 return
-            
+
             item = self.captured_items[idx]
             headers = item.get("headers", {})
-            
+
             ua = headers.get("User-Agent") or headers.get("user-agent")
             if ua:
                 self.ua_in.setText(ua)
-            
+
             referer = headers.get("Referer") or headers.get("referer")
             if referer:
                 self.ref_in.setText(referer)
-            
+
             auth = headers.get("Authorization") or headers.get("authorization")
             if auth:
                 current_cookies = self.cookies_in.text().strip()
@@ -445,79 +502,89 @@ class MainWindow(QtWidgets.QWidget):
                         current_cookies += "; "
                     current_cookies += f"Authorization: {auth}"
                     self.cookies_in.setText(current_cookies)
-            
+
             cookie_header = item.get("cookie_header", "")
             if cookie_header and cookie_header != self.cookies_in.text().strip():
                 self.cookies_in.setText(cookie_header)
-            
+
             self.status.setText("Applied headers from selected request")
-            
+
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Apply Headers", f"Could not apply headers: {e}")
+            QtWidgets.QMessageBox.warning(
+                self, "Apply Headers", f"Could not apply headers: {e}"
+            )
 
     def _on_resolution_selected(self, index):
         """Handle resolution selection from dropdown."""
-        if index < 0 or not hasattr(self, 'variant_uris') or index >= len(self.variant_uris):
+        if (
+            index < 0
+            or not hasattr(self, "variant_uris")
+            or index >= len(self.variant_uris)
+        ):
             return
-            
+
         try:
             selected_url = self.variant_uris[index]
             resolution_text = self.variant_combo.itemText(index)
-            
+
             if index == 0 and selected_url == "":
                 self.btn_download_selected.setEnabled(False)
                 self.status.setText("Please select a resolution")
                 return
-            
+
             self.url_in.setText(selected_url)
             self._auto_generate_output_path()
             self._auto_apply_headers_for_url(selected_url)
-            
+
             self.status.setText(f"Selected resolution: {resolution_text}")
             self._append(f"✅ Auto-selected resolution: {resolution_text}")
             self.btn_download_selected.setEnabled(True)
-            
+
         except Exception as e:
             self._append(f"❌ Error selecting resolution: {e}")
 
     def _auto_apply_headers_for_url(self, url):
         """Automatically apply the best matching headers for the given URL."""
         try:
-            if not hasattr(self, 'captured_items') or not self.captured_items:
+            if not hasattr(self, "captured_items") or not self.captured_items:
                 return
-                
+
             best_match = None
             url_lower = url.lower()
-            
+
             for item in self.captured_items:
                 item_url = (item.get("url") or "").lower()
-                if item_url == url_lower or (item_url.endswith(".m3u8") and url_lower.endswith(".m3u8")):
+                if item_url == url_lower or (
+                    item_url.endswith(".m3u8") and url_lower.endswith(".m3u8")
+                ):
                     best_match = item
                     break
-            
+
             if not best_match:
                 for item in self.captured_items:
-                    if item.get("url", "").lower().endswith(".m3u8") and item.get("headers"):
+                    if item.get("url", "").lower().endswith(".m3u8") and item.get(
+                        "headers"
+                    ):
                         best_match = item
                         break
-            
+
             if best_match:
                 headers = best_match.get("headers", {})
-                
+
                 ua = headers.get("User-Agent") or headers.get("user-agent")
                 if ua:
                     self.ua_in.setText(ua)
-                
+
                 referer = headers.get("Referer") or headers.get("referer")
                 if referer:
                     self.ref_in.setText(referer)
-                
+
                 cookie_header = best_match.get("cookie_header", "")
                 if cookie_header:
                     self.cookies_in.setText(cookie_header)
-                
+
                 self._append("🔧 Headers automatically applied")
-                
+
         except Exception as e:
             self._append(f"⚠️ Could not auto-apply headers: {e}")
 
@@ -525,20 +592,20 @@ class MainWindow(QtWidgets.QWidget):
         """Auto-generate output file path based on page URL."""
         try:
             page_url = self.page_in.text().strip()
-            
+
             if page_url:
                 derived_path = self._derive_nested_output(page_url)
                 self.out_in.setText(str(derived_path.resolve()))
             else:
                 default_path = str(Path.cwd() / "downloads" / "output.mp4")
                 self.out_in.setText(default_path)
-                
+
         except Exception as e:
             self._append(f"⚠️ Could not auto-generate output path: {e}")
 
     def _on_page_url_changed(self):
         """Handle page URL changes to auto-generate output file paths."""
-        if hasattr(self, '_loading_settings') and self._loading_settings:
+        if hasattr(self, "_loading_settings") and self._loading_settings:
             return
         self._auto_generate_output_path()
 
@@ -557,36 +624,30 @@ class MainWindow(QtWidgets.QWidget):
             segs = [sanitize(seg) for seg in (u.path or "").split("/") if seg]
             if not segs:
                 segs = ["video"]
-            
+
             stem = segs[-1]
             lower = stem.lower()
             if lower.endswith((".m3u8", ".mp4", ".ts")):
-                stem = stem[:stem.rfind(".")]
-            
+                stem = stem[: stem.rfind(".")]
+
             nested_dir = base.joinpath(*segs[:-1]) if len(segs) > 1 else base
             return nested_dir / f"{stem}.mp4"
         except Exception:
             return downloads_dir / "output.mp4"
 
-
-
-
-
-
-
     def _download_selected(self):
         """Download the currently selected resolution."""
         self._start()
-
-
-
-
 
     def _start(self):
         """Start the HLS download process with current settings."""
         url = self.url_in.text().strip()
         if not url:
-            QtWidgets.QMessageBox.warning(self, "Missing URL", "Capture a page and select a resolution to fill the variant URL.")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Missing URL",
+                "Capture a page and select a resolution to fill the variant URL.",
+            )
             return
         out_path = self.out_in.text().strip()
         # Auto-derive output if default/blank
@@ -607,7 +668,9 @@ class MainWindow(QtWidgets.QWidget):
             except Exception:
                 pass
         if not out_path:
-            QtWidgets.QMessageBox.warning(self, "Missing Output", "Please choose an output file path.")
+            QtWidgets.QMessageBox.warning(
+                self, "Missing Output", "Please choose an output file path."
+            )
             return
 
         self.btn_start.setEnabled(False)
@@ -625,10 +688,14 @@ class MainWindow(QtWidgets.QWidget):
             if capture_time:
                 if oldest_capture is None or capture_time < oldest_capture:
                     oldest_capture = capture_time
-        
-        if oldest_capture and (current_time - oldest_capture) > 300:  # 5 minutes = 300 seconds
+
+        if (
+            oldest_capture and (current_time - oldest_capture) > 300
+        ):  # 5 minutes = 300 seconds
             minutes_old = int((current_time - oldest_capture) / 60)
-            self._append(f"⚠️  Warning: Captured data is {minutes_old} minutes old. Consider re-capturing for fresh tokens.")
+            self._append(
+                f"⚠️  Warning: Captured data is {minutes_old} minutes old. Consider re-capturing for fresh tokens."
+            )
 
         # Prefer intercepted Referer for the selected URL; override any manual value if found
         ref = self.ref_in.text().strip()
@@ -646,7 +713,13 @@ class MainWindow(QtWidgets.QWidget):
                 ureq = it.get("url") or ""
                 if ureq == url:
                     hdrs = it.get("headers") or {}
-                    captured_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                    captured_ref = (
+                        hdrs.get("referer")
+                        or hdrs.get("Referer")
+                        or it.get("page_url")
+                        or it.get("frame_url")
+                        or None
+                    )
                     if captured_ref:
                         break
             # Else any request on same host
@@ -660,7 +733,13 @@ class MainWindow(QtWidgets.QWidget):
                         host = None
                     if host and host == target_host:
                         hdrs = it.get("headers") or {}
-                        captured_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                        captured_ref = (
+                            hdrs.get("referer")
+                            or hdrs.get("Referer")
+                            or it.get("page_url")
+                            or it.get("frame_url")
+                            or None
+                        )
                         if captured_ref:
                             break
             if captured_ref:
@@ -678,21 +757,27 @@ class MainWindow(QtWidgets.QWidget):
         for it in getattr(self, "captured_items", []) or []:
             if it.get("kind") == "request":
                 ureq = (it.get("url") or "").lower()
-                if ureq == url_low or (ureq.endswith(".m3u8") and url_low.endswith(".m3u8")):
+                if ureq == url_low or (
+                    ureq.endswith(".m3u8") and url_low.endswith(".m3u8")
+                ):
                     rtype = (it.get("resource_type") or "").lower() or None
                     hdrs = it.get("headers") or {}
-                    auth_hint = hdrs.get("authorization") or hdrs.get("Authorization") or None
+                    auth_hint = (
+                        hdrs.get("authorization") or hdrs.get("Authorization") or None
+                    )
                     break
         # Get selected resolution information
         res_text = None
         bw = None
-        if hasattr(self, 'variant_combo') and self.variant_combo.currentIndex() >= 0:
+        if hasattr(self, "variant_combo") and self.variant_combo.currentIndex() >= 0:
             current_index = self.variant_combo.currentIndex()
             res_text = self.variant_combo.itemText(current_index)
             # Extract bandwidth if available in the resolution text
-            if hasattr(self, 'variant_bandwidths') and current_index < len(self.variant_bandwidths):
+            if hasattr(self, "variant_bandwidths") and current_index < len(
+                self.variant_bandwidths
+            ):
                 bw = self.variant_bandwidths[current_index]
-        
+
         self.worker = HlsWorker(
             url=url,
             out_path=out_path,
@@ -721,7 +806,9 @@ class MainWindow(QtWidgets.QWidget):
         """Start capturing media URLs from the specified web page."""
         page_url = self.page_in.text().strip()
         if not page_url:
-            QtWidgets.QMessageBox.warning(self, "Missing Page URL", "Enter a page URL to open and capture.")
+            QtWidgets.QMessageBox.warning(
+                self, "Missing Page URL", "Enter a page URL to open and capture."
+            )
             return
         headers = {}
         ua = self.ua_in.text().strip() or DEFAULT_UA
@@ -747,7 +834,9 @@ class MainWindow(QtWidgets.QWidget):
         self.btn_capture.setEnabled(False)
         # Invert the checkbox logic: unchecked = headless (background), checked = show browser
         headless_mode = not self.headless_cb.isChecked()
-        self.cap_worker = CaptureWorker(page_url, headers, headless_mode, self.cap_timeout.value())
+        self.cap_worker = CaptureWorker(
+            page_url, headers, headless_mode, self.cap_timeout.value()
+        )
         self.cap_worker.captured.connect(self._on_captured)
         self.cap_worker.error.connect(self._on_capture_err)
         self.cap_worker.start()
@@ -756,36 +845,38 @@ class MainWindow(QtWidgets.QWidget):
     def _on_captured(self, items, cookie_header):
         self.status.setText("Captured")
         self.btn_capture.setEnabled(True)
-        
+
         capture_time = time.time()
         for item in items:
             item["capture_timestamp"] = capture_time
-            
+
         self.captured_items = items
         self.captured_cookie = cookie_header or ""
         if not self.cookies_in.text().strip() and self.captured_cookie:
             self.cookies_in.setText(self.captured_cookie)
-        
+
         try:
             captured_ref = None
             for it in items:
                 if it.get("kind") == "request":
                     hdrs = it.get("headers") or {}
-                    captured_ref = hdrs.get("referer") or hdrs.get("Referer") or captured_ref
+                    captured_ref = (
+                        hdrs.get("referer") or hdrs.get("Referer") or captured_ref
+                    )
                     if captured_ref:
                         break
             if captured_ref:
                 self.ref_in.setText(captured_ref)
         except Exception:
             pass
-        
+
         for it in items:
             ct = it.get("content_type") or ""
             self.capture_list.addItem(f"[{it['kind']}] {it['url']} {ct}")
-        
+
         master_body = None
         master_url = None
-        
+
         for it in items:
             u = it.get("url", "")
             b = it.get("body") or ""
@@ -793,14 +884,14 @@ class MainWindow(QtWidgets.QWidget):
                 master_body = b
                 master_url = u
                 break
-        
+
         if not master_body:
             candidates = []
             for it in items:
                 u = it.get("url", "").lower()
                 if u.endswith(".m3u8"):
                     candidates.append(it.get("url"))
-            
+
             for candidate in candidates:
                 if candidate:
                     captured_ref = None
@@ -811,15 +902,27 @@ class MainWindow(QtWidgets.QWidget):
                             u_low = (it.get("url") or "").lower()
                             if u_low == candidate.lower() or ".m3u8" in u_low:
                                 h = it.get("headers") or {}
-                                captured_ref = h.get("referer") or h.get("Referer") or captured_ref
-                                captured_origin = h.get("origin") or h.get("Origin") or captured_origin
-                                captured_rtype = it.get("resource_type") or captured_rtype
+                                captured_ref = (
+                                    h.get("referer") or h.get("Referer") or captured_ref
+                                )
+                                captured_origin = (
+                                    h.get("origin")
+                                    or h.get("Origin")
+                                    or captured_origin
+                                )
+                                captured_rtype = (
+                                    it.get("resource_type") or captured_rtype
+                                )
                                 if u_low == candidate.lower():
                                     break
                     try:
                         hdrs = {}
                         hdrs["User-Agent"] = self.ua_in.text().strip() or DEFAULT_UA
-                        ref_val = captured_ref or self.ref_in.text().strip() or self.page_in.text().strip()
+                        ref_val = (
+                            captured_ref
+                            or self.ref_in.text().strip()
+                            or self.page_in.text().strip()
+                        )
                         if ref_val:
                             self.ref_in.setText(ref_val)
                         if ref_val:
@@ -829,16 +932,26 @@ class MainWindow(QtWidgets.QWidget):
                                     origin = captured_origin
                                 else:
                                     ro = urllib.parse.urlparse(ref_val)
-                                    origin = f"{ro.scheme}://{ro.netloc}" if ro.scheme and ro.netloc else None
+                                    origin = (
+                                        f"{ro.scheme}://{ro.netloc}"
+                                        if ro.scheme and ro.netloc
+                                        else None
+                                    )
                             except Exception:
                                 origin = None
                             if origin:
                                 hdrs["Origin"] = origin
-                        
+
                         try:
                             cu = urllib.parse.urlparse(candidate)
-                            on = urllib.parse.urlparse(origin).netloc if origin else None
-                            site_val = "same-origin" if (on and cu.netloc == on) else "cross-site"
+                            on = (
+                                urllib.parse.urlparse(origin).netloc if origin else None
+                            )
+                            site_val = (
+                                "same-origin"
+                                if (on and cu.netloc == on)
+                                else "cross-site"
+                            )
                         except Exception:
                             site_val = "cross-site"
                         hdrs.setdefault("Accept", "*/*")
@@ -847,12 +960,24 @@ class MainWindow(QtWidgets.QWidget):
                         hdrs.setdefault("Sec-Fetch-Dest", "empty")
                         hdrs.setdefault("Sec-Fetch-Mode", "cors")
                         hdrs.setdefault("Sec-Fetch-Site", site_val)
-                        
+
                         try:
-                            ch = h if 'h' in locals() else {}
-                            sec_ch_ua = ch.get("sec-ch-ua") or ch.get("Sec-CH-UA") or "\"Chromium\";v=124, \"Not.A/Brand\";v=24"
-                            sec_ch_platform = ch.get("sec-ch-ua-platform") or ch.get("Sec-CH-UA-Platform") or "\"macOS\""
-                            sec_ch_mobile = ch.get("sec-ch-ua-mobile") or ch.get("Sec-CH-UA-Mobile") or "?0"
+                            ch = h if "h" in locals() else {}
+                            sec_ch_ua = (
+                                ch.get("sec-ch-ua")
+                                or ch.get("Sec-CH-UA")
+                                or '"Chromium";v=124, "Not.A/Brand";v=24'
+                            )
+                            sec_ch_platform = (
+                                ch.get("sec-ch-ua-platform")
+                                or ch.get("Sec-CH-UA-Platform")
+                                or '"macOS"'
+                            )
+                            sec_ch_mobile = (
+                                ch.get("sec-ch-ua-mobile")
+                                or ch.get("Sec-CH-UA-Mobile")
+                                or "?0"
+                            )
                         except Exception:
                             sec_ch_ua, sec_ch_platform, sec_ch_mobile = None, None, None
                         if sec_ch_ua:
@@ -863,9 +988,13 @@ class MainWindow(QtWidgets.QWidget):
                             hdrs.setdefault("Sec-CH-UA-Mobile", sec_ch_mobile)
                         if captured_rtype in ("xhr", "fetch"):
                             hdrs.setdefault("X-Requested-With", "XMLHttpRequest")
-                        
+
                         try:
-                            auth = (h.get("authorization") or h.get("Authorization") if 'h' in locals() else None)
+                            auth = (
+                                h.get("authorization") or h.get("Authorization")
+                                if "h" in locals()
+                                else None
+                            )
                         except Exception:
                             auth = None
                         if auth:
@@ -879,7 +1008,9 @@ class MainWindow(QtWidgets.QWidget):
                             master_url = candidate
                             break
                     except Exception as e:
-                        self._append(f"Failed to fetch master playlist from {candidate}: {e}")
+                        self._append(
+                            f"Failed to fetch master playlist from {candidate}: {e}"
+                        )
                         continue
         if master_body and master_url:
             variants = parse_master_playlist(master_body, master_url)
@@ -889,26 +1020,30 @@ class MainWindow(QtWidgets.QWidget):
                 self.btn_download_selected.setEnabled(False)
                 self.variant_combo.clear()
                 self.variant_uris = []
-                
+
                 self.variant_combo.addItem("Select a resolution")
                 self.variant_uris.append("")
-                
-                sorted_variants = sorted(variants, key=lambda v: v.bandwidth or 0, reverse=True)
-                
+
+                sorted_variants = sorted(
+                    variants, key=lambda v: v.bandwidth or 0, reverse=True
+                )
+
                 for v in sorted_variants:
-                    resolution = v.resolution or 'Unknown'
+                    resolution = v.resolution or "Unknown"
                     bandwidth = v.bandwidth
                     if bandwidth:
                         bandwidth_mbps = round(bandwidth / 1000000, 1)
                         label = f"{resolution} ({bandwidth_mbps} Mbps)"
                     else:
                         label = f"{resolution}"
-                    
+
                     self.variant_combo.addItem(label)
                     self.variant_uris.append(v.uri)
-                
+
                 self.variant_combo.setCurrentIndex(0)
-                self._append(f"🎯 Found {len(sorted_variants)} resolutions. Please select your preferred resolution from the dropdown above.")
+                self._append(
+                    f"🎯 Found {len(sorted_variants)} resolutions. Please select your preferred resolution from the dropdown above."
+                )
             else:
                 self._append("No variants found in master playlist.")
         else:
@@ -918,13 +1053,19 @@ class MainWindow(QtWidgets.QWidget):
                     u = (it.get("url") or "").lower()
                     if u.endswith(".m3u8"):
                         m3u8_urls.append(it.get("url"))
-                
+
                 def infer_label(u: str) -> str:
                     try:
-                        path_segs = [seg for seg in (urllib.parse.urlparse(u).path or "").split("/") if seg]
+                        path_segs = [
+                            seg
+                            for seg in (urllib.parse.urlparse(u).path or "").split("/")
+                            if seg
+                        ]
                         for seg in path_segs:
                             try:
-                                dec = base64.b64decode(seg + "==" if len(seg) % 4 != 0 else seg).decode("utf-8", errors="ignore")
+                                dec = base64.b64decode(
+                                    seg + "==" if len(seg) % 4 != 0 else seg
+                                ).decode("utf-8", errors="ignore")
                                 dec2 = "".join(ch for ch in dec if ch.isdigit())
                                 if dec2.isdigit():
                                     return dec2
@@ -938,9 +1079,11 @@ class MainWindow(QtWidgets.QWidget):
                     return "unknown"
 
                 derived = [(infer_label(u), u) for u in m3u8_urls]
+
                 def sort_key(t):
                     lbl = t[0]
                     return -(int(lbl) if lbl.isdigit() else -1)
+
                 derived.sort(key=sort_key)
 
                 if derived:
@@ -949,19 +1092,25 @@ class MainWindow(QtWidgets.QWidget):
                     self.btn_download_selected.setEnabled(False)
                     self.variant_combo.clear()
                     self.variant_uris = []
-                    
+
                     self.variant_combo.addItem("Select a resolution")
                     self.variant_uris.append("")
-                    
+
                     for lbl, u in derived:
                         label = f"{lbl if lbl != 'unknown' else 'unknown'}"
                         self.variant_combo.addItem(label)
                         self.variant_uris.append(u)
-                    self._append("Variants inferred from captured URLs. Please select one from the dropdown above.")
+                    self._append(
+                        "Variants inferred from captured URLs. Please select one from the dropdown above."
+                    )
                 else:
-                    self._append("No master playlist found. Click play and try capture again.")
+                    self._append(
+                        "No master playlist found. Click play and try capture again."
+                    )
             except Exception:
-                self._append("No master playlist found. Click play and try capture again.")
+                self._append(
+                    "No master playlist found. Click play and try capture again."
+                )
 
     @QtCore.pyqtSlot(str)
     def _on_capture_err(self, msg):
@@ -972,17 +1121,25 @@ class MainWindow(QtWidgets.QWidget):
     def _use_selected_variant(self):
         idx = self.variant_combo.currentIndex()
         if idx < 0 or idx >= len(self.variant_uris):
-            QtWidgets.QMessageBox.warning(self, "No selection", "Please select a resolution from the list.")
+            QtWidgets.QMessageBox.warning(
+                self, "No selection", "Please select a resolution from the list."
+            )
             return
         chosen_uri = self.variant_uris[idx]
         self.url_in.setText(chosen_uri)
-        
+
         try:
             cap_ref = None
             for it in getattr(self, "captured_items", []) or []:
                 if it.get("kind") == "request" and (it.get("url") or "") == chosen_uri:
                     hdrs = it.get("headers") or {}
-                    cap_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                    cap_ref = (
+                        hdrs.get("referer")
+                        or hdrs.get("Referer")
+                        or it.get("page_url")
+                        or it.get("frame_url")
+                        or None
+                    )
                     if cap_ref:
                         break
             if not cap_ref:
@@ -999,14 +1156,20 @@ class MainWindow(QtWidgets.QWidget):
                         host = None
                     if host and target_host and host == target_host:
                         hdrs = it.get("headers") or {}
-                        cap_ref = hdrs.get("referer") or hdrs.get("Referer") or it.get("page_url") or it.get("frame_url") or None
+                        cap_ref = (
+                            hdrs.get("referer")
+                            or hdrs.get("Referer")
+                            or it.get("page_url")
+                            or it.get("frame_url")
+                            or None
+                        )
                         if cap_ref:
                             break
             if cap_ref:
                 self.ref_in.setText(cap_ref)
         except Exception:
             pass
-        
+
         default_out = str(Path.cwd() / "downloads" / "output.mp4")
         cur_out = self.out_in.text().strip()
         if not cur_out or cur_out == default_out:
@@ -1030,7 +1193,9 @@ class MainWindow(QtWidgets.QWidget):
         try:
             s = QtCore.QSettings(str(SETTINGS_PATH), QtCore.QSettings.IniFormat)
             self.url_in.setText(s.value("url", ""))
-            self.out_in.setText(s.value("out", str(Path.cwd() / "downloads" / "output.mp4")))
+            self.out_in.setText(
+                s.value("out", str(Path.cwd() / "downloads" / "output.mp4"))
+            )
             self.ua_in.setText(s.value("ua", DEFAULT_UA))
             self.ref_in.setText(s.value("ref", ""))
             self.cookies_in.setText(s.value("cookies", ""))

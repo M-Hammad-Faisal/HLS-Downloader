@@ -5,12 +5,12 @@ import aiohttp
 
 async def download_http(url: str, out_path: Path, headers: dict):
     """Download a file from an HTTP URL with progress tracking.
-    
+
     Args:
         url: HTTP URL to download from
         out_path: Local file path to save the downloaded content
         headers: HTTP headers to include in the request
-        
+
     Raises:
         aiohttp.ClientError: If the HTTP request fails
         OSError: If file writing fails

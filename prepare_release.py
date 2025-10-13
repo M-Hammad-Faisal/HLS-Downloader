@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+
 class ReleasePreparator:
     def __init__(self):
         self.version = "2.0.3"
@@ -22,44 +23,44 @@ class ReleasePreparator:
         self.current_dir = Path.cwd()
         self.release_dir = self.current_dir / "release_assets"
         self.current_platform = platform.system().lower()
-        
+
         # Platform configurations
         self.platforms = {
             "windows": {
                 "bundle_ext": ".zip",
                 "executable_name": "HLS Downloader.exe",
-                "launcher": "install.bat"
+                "launcher": "install.bat",
             },
             "darwin": {
-                "bundle_ext": ".tar.gz", 
+                "bundle_ext": ".tar.gz",
                 "executable_name": "HLS Downloader.app",
-                "launcher": "install.sh"
+                "launcher": "install.sh",
             },
             "linux": {
                 "bundle_ext": ".tar.gz",
-                "executable_name": "HLS Downloader", 
-                "launcher": "install.sh"
-            }
+                "executable_name": "HLS Downloader",
+                "launcher": "install.sh",
+            },
         }
-    
+
     def log(self, message, level="INFO"):
         """Log with timestamp."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] [{level}] {message}")
-    
+
     def clean_release_dir(self):
         """Clean and create release directory."""
         if self.release_dir.exists():
             shutil.rmtree(self.release_dir)
         self.release_dir.mkdir(exist_ok=True)
         self.log("Release directory prepared")
-    
+
     def create_platform_bundle(self, target_platform):
         """Create standalone executable bundle for specific platform."""
         self.log(f"Creating {target_platform} standalone executable bundle...")
-        
+
         platform_config = self.platforms[target_platform]
-        
+
         # Create platform-specific bundle directory
         bundle_name = f"{self.app_name}-{self.version}-{target_platform}"
         if target_platform == "darwin":
@@ -68,124 +69,132 @@ class ReleasePreparator:
             bundle_name += "-x64"
         elif target_platform == "windows":
             bundle_name += "-x64"
-        
+
         bundle_dir = self.release_dir / bundle_name
         bundle_dir.mkdir(exist_ok=True)
-        
+
         # Build standalone executable with PyInstaller
         self.build_executable(target_platform)
-        
+
         # Copy the built executable to bundle
         dist_base = self.current_dir / "dist"
         exe_name = platform_config["executable_name"]
         app_name = exe_name.replace(".exe", "").replace(".app", "")
-        
+
         # Find the executable - PyInstaller creates a subdirectory
         possible_names = [
             app_name,  # Original name with spaces
             app_name.replace(" ", "_"),  # Spaces to underscores
             app_name.replace(" ", "-"),  # Spaces to hyphens
-            app_name.replace(" ", ""),   # Remove spaces entirely
+            app_name.replace(" ", ""),  # Remove spaces entirely
         ]
-        
+
         exe_path = None
         for name in possible_names:
             candidate = dist_base / name / exe_name
             if candidate.exists():
                 exe_path = candidate
                 break
-        
+
         if exe_path is None:
             # Try direct path as fallback
             direct_path = dist_base / exe_name
             if direct_path.exists():
                 exe_path = direct_path
             else:
-                available_dirs = [d.name for d in dist_base.iterdir() if d.is_dir()] if dist_base.exists() else []
-                raise FileNotFoundError(f"Executable not found. Tried: {[str(dist_base / name / exe_name) for name in possible_names]}. Available dirs: {available_dirs}")
-        
+                available_dirs = (
+                    [d.name for d in dist_base.iterdir() if d.is_dir()]
+                    if dist_base.exists()
+                    else []
+                )
+                raise FileNotFoundError(
+                    f"Executable not found. Tried: {[str(dist_base / name / exe_name) for name in possible_names]}. Available dirs: {available_dirs}"
+                )
+
         if target_platform == "darwin" and exe_name.endswith(".app"):
             shutil.copytree(exe_path, bundle_dir / exe_name)
         else:
             shutil.copy2(exe_path, bundle_dir / exe_name)
-        
+
         self.log(f"Included standalone executable: {exe_name}")
-        
+
         # Copy only essential assets (no source code)
         assets_dir = self.current_dir / "assets"
         if assets_dir.exists():
             shutil.copytree(assets_dir, bundle_dir / "assets")
-        
+
         # Create simple launcher scripts (no Python dependencies)
         self.create_launcher_scripts(bundle_dir, target_platform, exe_name)
-        
+
         # Create installation instructions for standalone app
         self.create_standalone_instructions(bundle_dir, target_platform, exe_name)
-        
+
         # Create archive
         archive_name = bundle_name + platform_config["bundle_ext"]
         archive_path = self.release_dir / archive_name
-        
+
         if platform_config["bundle_ext"] == ".zip":
-            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(bundle_dir):
                     for file in files:
                         file_path = Path(root) / file
                         arcname = file_path.relative_to(bundle_dir)
                         zipf.write(file_path, arcname)
         else:
-            with tarfile.open(archive_path, 'w:gz') as tarf:
+            with tarfile.open(archive_path, "w:gz") as tarf:
                 tarf.add(bundle_dir, arcname=bundle_name)
-        
+
         # Clean up bundle directory
         shutil.rmtree(bundle_dir)
-        
+
         size_mb = archive_path.stat().st_size / 1024 / 1024
         self.log(f"Created {target_platform} bundle: {archive_name} ({size_mb:.1f} MB)")
-        
+
         return archive_path
-    
+
     def install_playwright_browsers(self):
         """Install Playwright browsers to local pw-browsers directory."""
         self.log("Installing Playwright browsers for bundling...")
-        
+
         browsers_dir = self.current_dir / "pw-browsers"
-        
+
         # Remove existing browsers directory if it exists
         if browsers_dir.exists():
             shutil.rmtree(browsers_dir)
-        
+
         # Set environment variable to install browsers in local directory
         env = os.environ.copy()
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir)
-        
+
         try:
             # Install only Chromium to keep bundle size reasonable (~280MB vs ~650MB for all browsers)
             cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
             subprocess.run(cmd, check=True, env=env, cwd=self.current_dir)
             self.log(f"Successfully installed Playwright browsers to {browsers_dir}")
-            
+
             # Verify installation
             if not browsers_dir.exists():
                 raise RuntimeError("Playwright browsers directory was not created")
-                
+
             # Log browser directory size for reference
-            total_size = sum(f.stat().st_size for f in browsers_dir.rglob('*') if f.is_file())
+            total_size = sum(
+                f.stat().st_size for f in browsers_dir.rglob("*") if f.is_file()
+            )
             size_mb = total_size / (1024 * 1024)
             self.log(f"Playwright browsers directory size: {size_mb:.1f} MB")
-            
+
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to install Playwright browsers: {e}")
 
     def build_executable(self, target_platform):
         """Build standalone executable using PyInstaller."""
         self.log(f"Building standalone executable for {target_platform}...")
-        
+
         # Install Playwright browsers first
         self.install_playwright_browsers()
-        
+
         platform_config = self.platforms[target_platform]
-        
+
         # Clean previous builds
         dist_dir = self.current_dir / "dist"
         build_dir = self.current_dir / "build"
@@ -193,32 +202,46 @@ class ReleasePreparator:
             shutil.rmtree(dist_dir)
         if build_dir.exists():
             shutil.rmtree(build_dir)
-        
+
         # Determine path separator for --add-data (OS-specific)
         path_sep = ";" if target_platform == "windows" else ":"
-        
+
         # PyInstaller command
         cmd = [
-            sys.executable, "-m", "PyInstaller",
+            sys.executable,
+            "-m",
+            "PyInstaller",
             "--onedir",  # Create a one-folder bundle
             "--windowed" if target_platform in ["windows", "darwin"] else "--console",
-            "--name", platform_config["executable_name"].replace(".exe", "").replace(".app", ""),
-            "--add-data", f"{self.current_dir / 'assets'}{path_sep}assets",
+            "--name",
+            platform_config["executable_name"].replace(".exe", "").replace(".app", ""),
+            "--add-data",
+            f"{self.current_dir / 'assets'}{path_sep}assets",
             # Note: We'll copy pw-browsers manually after PyInstaller to avoid binary processing issues
-            "--hidden-import", "hlsdownloader",
-            "--hidden-import", "hlsdownloader.gui",
-            "--hidden-import", "hlsdownloader.cli",
-            "--hidden-import", "hlsdownloader.hls",
-            "--hidden-import", "hlsdownloader.capture",
-            "--hidden-import", "hlsdownloader.http_dl",
-            "--hidden-import", "hlsdownloader.utils",
-            "--hidden-import", "playwright._impl._driver",
-            "--hidden-import", "playwright._impl._transport",
-            "--hidden-import", "playwright._impl._connection",
+            "--hidden-import",
+            "hlsdownloader",
+            "--hidden-import",
+            "hlsdownloader.gui",
+            "--hidden-import",
+            "hlsdownloader.cli",
+            "--hidden-import",
+            "hlsdownloader.hls",
+            "--hidden-import",
+            "hlsdownloader.capture",
+            "--hidden-import",
+            "hlsdownloader.http_dl",
+            "--hidden-import",
+            "hlsdownloader.utils",
+            "--hidden-import",
+            "playwright._impl._driver",
+            "--hidden-import",
+            "playwright._impl._transport",
+            "--hidden-import",
+            "playwright._impl._connection",
             "--clean",
-            str(self.current_dir / "main.py")
+            str(self.current_dir / "main.py"),
         ]
-        
+
         # Add icon if available
         if target_platform == "windows":
             icon_path = self.current_dir / "assets" / "icon.ico"
@@ -226,58 +249,66 @@ class ReleasePreparator:
             icon_path = self.current_dir / "assets" / "icon.icns"
         else:  # linux
             icon_path = None
-            
+
         if icon_path and icon_path.exists():
             cmd.extend(["--icon", str(icon_path)])
-        
+
         # Add platform-specific options
         if target_platform == "darwin":
             cmd.extend(["--osx-bundle-identifier", "com.hlsdownloader.app"])
-        
+
         try:
             subprocess.run(cmd, check=True, cwd=self.current_dir)
             self.log(f"Successfully built executable for {target_platform}")
-            
+
             # Manually copy pw-browsers directory to avoid PyInstaller binary processing issues
             self.copy_browsers_to_dist(target_platform)
-            
+
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to build executable: {e}")
-    
+
     def copy_browsers_to_dist(self, target_platform):
         """Manually copy pw-browsers directory to the distribution folder."""
         self.log("Copying Playwright browsers to distribution folder...")
-        
+
         platform_config = self.platforms[target_platform]
-        app_name = platform_config["executable_name"].replace(".exe", "").replace(".app", "")
-        
+        app_name = (
+            platform_config["executable_name"].replace(".exe", "").replace(".app", "")
+        )
+
         # Find the distribution directory - try multiple possible names
         dist_base = self.current_dir / "dist"
         possible_names = [
             app_name,  # Original name with spaces
             app_name.replace(" ", "_"),  # Spaces to underscores
             app_name.replace(" ", "-"),  # Spaces to hyphens
-            app_name.replace(" ", ""),   # Remove spaces entirely
+            app_name.replace(" ", ""),  # Remove spaces entirely
         ]
-        
+
         dist_dir = None
         for name in possible_names:
             candidate = dist_base / name
             if candidate.exists() and candidate.is_dir():
                 dist_dir = candidate
                 break
-        
+
         if dist_dir is None:
             # List available directories for debugging
-            available_dirs = [d.name for d in dist_base.iterdir() if d.is_dir()] if dist_base.exists() else []
-            raise RuntimeError(f"Distribution directory not found. Tried: {possible_names}. Available: {available_dirs}")
-        
+            available_dirs = (
+                [d.name for d in dist_base.iterdir() if d.is_dir()]
+                if dist_base.exists()
+                else []
+            )
+            raise RuntimeError(
+                f"Distribution directory not found. Tried: {possible_names}. Available: {available_dirs}"
+            )
+
         self.log(f"Found distribution directory: {dist_dir}")
-        
+
         # Copy pw-browsers directory
         src_browsers = self.current_dir / "pw-browsers"
         dst_browsers = dist_dir / "pw-browsers"
-        
+
         if src_browsers.exists():
             if dst_browsers.exists():
                 shutil.rmtree(dst_browsers)
@@ -285,32 +316,32 @@ class ReleasePreparator:
             self.log(f"Successfully copied Playwright browsers to {dst_browsers}")
         else:
             self.log("Warning: pw-browsers directory not found, skipping browser copy")
-    
+
     def create_launcher_scripts(self, bundle_dir, platform, exe_name):
         """Create simple launcher scripts for standalone executables."""
-        
+
         if platform == "windows":
-            launcher_content = f'''@echo off
+            launcher_content = f"""@echo off
 echo Starting HLS Downloader...
 start "" "{exe_name}"
-'''
+"""
             with open(bundle_dir / "Launch_HLS_Downloader.bat", "w") as f:
                 f.write(launcher_content)
-                
+
         elif platform in ["darwin", "linux"]:
-            launcher_content = f'''#!/bin/bash
+            launcher_content = f"""#!/bin/bash
 echo "Starting HLS Downloader..."
 cd "$(dirname "$0")"
 ./{exe_name}
-'''
+"""
             launcher_path = bundle_dir / "Launch_HLS_Downloader.sh"
             with open(launcher_path, "w") as f:
                 f.write(launcher_content)
             os.chmod(launcher_path, 0o755)
-    
+
     def create_standalone_instructions(self, bundle_dir, platform, exe_name):
         """Create installation instructions for standalone executables."""
-        
+
         if platform == "windows":
             instructions = f"""# Windows Installation Instructions
 
@@ -380,12 +411,10 @@ cd "$(dirname "$0")"
 - Install missing libraries if needed: `sudo apt install libxcb1`
 - For GUI issues, install: `sudo apt install libqt5gui5`
 """
-        
-        with open(bundle_dir / f"README_{platform.upper()}.md", 'w') as f:
-            f.write(instructions)
-    
 
-    
+        with open(bundle_dir / f"README_{platform.upper()}.md", "w") as f:
+            f.write(instructions)
+
     def create_release_notes(self):
         """Create comprehensive release notes."""
         release_notes = f"""# HLS Video Downloader v{self.version} Release Notes
@@ -492,14 +521,14 @@ Built with:
 
 **Full Changelog**: [v0.9.0...v{self.version}](https://github.com/yourusername/VideoDownloader/compare/v0.9.0...v{self.version})
 """
-        
+
         release_notes_path = self.release_dir / "RELEASE_NOTES.md"
-        with open(release_notes_path, 'w') as f:
+        with open(release_notes_path, "w") as f:
             f.write(release_notes)
-        
+
         self.log(f"Created release notes: {release_notes_path}")
         return release_notes_path
-    
+
     def create_github_release_template(self):
         """Create GitHub release template."""
         template = f"""# 🎬 HLS Video Downloader v{self.version}
@@ -542,86 +571,89 @@ Found a bug? [Create an issue](https://github.com/yourusername/VideoDownloader/i
 ---
 **Note**: First-time users should download the platform-specific bundle for the easiest installation experience.
 """
-        
+
         template_path = self.release_dir / "GITHUB_RELEASE_TEMPLATE.md"
-        with open(template_path, 'w') as f:
+        with open(template_path, "w") as f:
             f.write(template)
-        
+
         self.log(f"Created GitHub release template: {template_path}")
         return template_path
-    
+
     def generate_checksums(self):
         """Generate SHA256 checksums for all release assets."""
         import hashlib
-        
+
         checksums = {}
         checksum_file = self.release_dir / "SHA256SUMS.txt"
-        
-        with open(checksum_file, 'w') as f:
+
+        with open(checksum_file, "w") as f:
             f.write(f"# SHA256 Checksums for {self.app_name} v{self.version}\n")
-            f.write(f"# Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
-            
+            f.write(
+                f"# Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+            )
+
             for file_path in self.release_dir.glob("*.zip"):
                 sha256 = self.calculate_sha256(file_path)
                 checksums[file_path.name] = sha256
                 f.write(f"{sha256}  {file_path.name}\n")
-            
+
             for file_path in self.release_dir.glob("*.tar.gz"):
                 sha256 = self.calculate_sha256(file_path)
                 checksums[file_path.name] = sha256
                 f.write(f"{sha256}  {file_path.name}\n")
-        
+
         self.log(f"Generated checksums: {checksum_file}")
         return checksums
-    
+
     def calculate_sha256(self, file_path):
         """Calculate SHA256 hash of a file."""
         import hashlib
+
         sha256_hash = hashlib.sha256()
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
-    
+
     def prepare_release(self):
         """Main release preparation process."""
         self.log("🎬 Starting HLS Video Downloader Release Preparation")
         self.log("=" * 60)
-        
+
         try:
             # Clean release directory
             self.clean_release_dir()
-            
+
             # Generate platform bundle for current platform only
             # PyInstaller can't cross-compile, so we build for current platform
             created_bundles = []
             current_platform = self.current_platform
             if current_platform not in self.platforms:
                 raise ValueError(f"Unsupported platform: {current_platform}")
-            
+
             self.log(f"Building for current platform: {current_platform}")
             bundle_path = self.create_platform_bundle(current_platform)
             created_bundles.append(bundle_path)
-            
+
             # Create documentation
             release_notes = self.create_release_notes()
             github_template = self.create_github_release_template()
-            
+
             # Generate checksums
             checksums = self.generate_checksums()
-            
+
             # Summary
             self.log("=" * 60)
             self.log("🎉 Release preparation completed successfully!")
             self.log(f"📁 Release assets: {self.release_dir}")
             self.log("📦 Created bundles:")
-            
+
             total_size = 0
             for bundle in created_bundles:
                 size_mb = bundle.stat().st_size / 1024 / 1024
                 total_size += size_mb
                 self.log(f"   • {bundle.name} ({size_mb:.1f} MB)")
-            
+
             self.log(f"💾 Total size: {total_size:.1f} MB")
             self.log("📋 Documentation:")
             self.log(f"   • {release_notes.name}")
@@ -630,21 +662,22 @@ Found a bug? [Create an issue](https://github.com/yourusername/VideoDownloader/i
             self.log(f"   • SHA256SUMS.txt")
             self.log("=" * 60)
             self.log("🚀 Ready for GitHub release!")
-            
+
             return True
-            
+
         except Exception as e:
             self.log(f"❌ Release preparation failed: {e}", "ERROR")
             return False
+
 
 def main():
     """Main entry point."""
     print("🎬 HLS Video Downloader - Release Preparator")
     print("=" * 60)
-    
+
     preparator = ReleasePreparator()
     success = preparator.prepare_release()
-    
+
     if success:
         print("\n🎯 Next Steps:")
         print("1. Review generated assets in release_assets/")
@@ -652,8 +685,9 @@ def main():
         print("3. Commit and push your code")
         print("4. Create GitHub release using GITHUB_RELEASE_TEMPLATE.md")
         print("5. Upload all bundle files as release assets")
-    
+
     return 0 if success else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

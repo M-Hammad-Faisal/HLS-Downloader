@@ -22,7 +22,7 @@ def setup_playwright_browsers():
     # Tell Playwright where the bundled browsers live
     browsers_path = resource_path("pw-browsers")
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
-    
+
     # Also set QT_QPA_PLATFORM for headless environments (helps with CI/CD)
     if not os.environ.get("DISPLAY") and not os.environ.get("QT_QPA_PLATFORM"):
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -32,9 +32,10 @@ def main():
     """Launch the HLS Downloader PyQt5 GUI application."""
     # Set up Playwright browsers before any imports
     setup_playwright_browsers()
-    
+
     # Import after setting up environment
     from hlsdownloader.gui import main as run_gui
+
     run_gui()
 
 

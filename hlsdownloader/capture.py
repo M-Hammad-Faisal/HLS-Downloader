@@ -47,7 +47,7 @@ def capture_m3u8(
 
         context.close()
         browser.close()
-    
+
     seen = set()
     uniq = []
     for u in found:
@@ -92,7 +92,9 @@ def capture_media(
         )
         context = browser.new_context(
             user_agent=eff_headers.get("User-Agent", DEFAULT_UA),
-            extra_http_headers={k: v for k, v in eff_headers.items() if k.lower() != "user-agent"},
+            extra_http_headers={
+                k: v for k, v in eff_headers.items() if k.lower() != "user-agent"
+            },
             ignore_https_errors=True,
             viewport={"width": 1366, "height": 768},
             locale="en-US",
@@ -157,19 +159,25 @@ def capture_media(
                         frame_url = getattr(frame, "url", None)
                 except Exception:
                     frame_url = None
-                found.append({
-                    "url": url,
-                    "kind": "request",
-                    "content_type": None,
-                    "body": None,
-                    "headers": req_headers,
-                    "resource_type": rtype,
-                    "page_url": getattr(page_ref, "url", None) if page_ref else page_url,
-                    "frame_url": frame_url,
-                })
+                found.append(
+                    {
+                        "url": url,
+                        "kind": "request",
+                        "content_type": None,
+                        "body": None,
+                        "headers": req_headers,
+                        "resource_type": rtype,
+                        "page_url": (
+                            getattr(page_ref, "url", None) if page_ref else page_url
+                        ),
+                        "frame_url": frame_url,
+                    }
+                )
                 try:
                     if page_ref is not None:
-                        page_media_counts[page_ref] = page_media_counts.get(page_ref, 0) + 1
+                        page_media_counts[page_ref] = (
+                            page_media_counts.get(page_ref, 0) + 1
+                        )
                 except Exception:
                     pass
 
@@ -186,7 +194,9 @@ def capture_media(
             )
             if hit:
                 body = None
-                if include_m3u8_body and ("mpegurl" in ct or url.lower().endswith(".m3u8")):
+                if include_m3u8_body and (
+                    "mpegurl" in ct or url.lower().endswith(".m3u8")
+                ):
                     try:
                         body = resp.text()
                     except Exception:
@@ -196,14 +206,20 @@ def capture_media(
                             hdrs = {
                                 "User-Agent": eff_headers.get("User-Agent", DEFAULT_UA),
                                 "Accept": eff_headers.get("Accept", "*/*"),
-                                "Accept-Language": eff_headers.get("Accept-Language", "en-US,en;q=0.9"),
+                                "Accept-Language": eff_headers.get(
+                                    "Accept-Language", "en-US,en;q=0.9"
+                                ),
                             }
                             ref_val = eff_headers.get("Referer") or page_url
                             if ref_val:
                                 hdrs["Referer"] = ref_val
                                 try:
                                     ro = urlparse(ref_val)
-                                    origin = f"{ro.scheme}://{ro.netloc}" if ro.scheme and ro.netloc else None
+                                    origin = (
+                                        f"{ro.scheme}://{ro.netloc}"
+                                        if ro.scheme and ro.netloc
+                                        else None
+                                    )
                                 except Exception:
                                     origin = None
                                 if origin:
@@ -226,17 +242,23 @@ def capture_media(
                         resp_headers = {}
                 if verbose:
                     print("Response:", url, ct or "")
-                found.append({
-                    "url": url,
-                    "kind": "response",
-                    "content_type": ct or None,
-                    "body": body,
-                    "headers": resp_headers,
-                    "page_url": getattr(page_ref, "url", None) if page_ref else page_url,
-                })
+                found.append(
+                    {
+                        "url": url,
+                        "kind": "response",
+                        "content_type": ct or None,
+                        "body": body,
+                        "headers": resp_headers,
+                        "page_url": (
+                            getattr(page_ref, "url", None) if page_ref else page_url
+                        ),
+                    }
+                )
                 try:
                     if page_ref is not None:
-                        page_media_counts[page_ref] = page_media_counts.get(page_ref, 0) + 1
+                        page_media_counts[page_ref] = (
+                            page_media_counts.get(page_ref, 0) + 1
+                        )
                 except Exception:
                     pass
 
@@ -303,12 +325,12 @@ def capture_media(
         context.on("page", on_new_page)
 
         page.goto(page_url, wait_until="domcontentloaded")
-        
+
         try:
             page.wait_for_timeout(3000)
         except Exception:
             pass
-            
+
         try:
             main_page = page
             for p in list(context.pages):
@@ -319,12 +341,12 @@ def capture_media(
                         pass
         except Exception:
             pass
-            
+
         try:
             page.reload(wait_until="domcontentloaded")
         except Exception:
             pass
-            
+
         try:
             page.wait_for_timeout(2000)
         except Exception:
@@ -376,18 +398,23 @@ def capture_media(
             page.bring_to_front()
         except Exception:
             pass
-            
+
         for attempt in range(3):
             try:
                 page.click("video", timeout=2000, force=True)
             except Exception:
                 pass
             try:
-                page.click("button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control", timeout=1000, force=True)
+                page.click(
+                    "button[aria-label*='play' i], .plyr__control[data-plyr='play'], .vjs-play-control",
+                    timeout=1000,
+                    force=True,
+                )
             except Exception:
                 pass
             try:
-                page.evaluate("""
+                page.evaluate(
+                    """
                     (() => {
                         const videos = document.querySelectorAll('video');
                         videos.forEach(v => {
@@ -412,7 +439,8 @@ def capture_media(
                             try { c.click(); } catch(e) {}
                         });
                     })();
-                """)
+                """
+                )
             except Exception:
                 pass
             try:
@@ -451,7 +479,9 @@ def capture_media(
                 pass
 
         cookies = context.cookies()
-        cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies) if cookies else ""
+        cookie_header = (
+            "; ".join(f"{c['name']}={c['value']}" for c in cookies) if cookies else ""
+        )
 
         try:
             if api_ctx is not None:
