@@ -11,20 +11,8 @@ permissions:
 
 jobs:
   build-installers:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-            artifact: HLS-Downloader-Installer-Windows.exe
-          - os: macos-latest
-            platform: macos
-            artifact: HLS-Downloader-Installer-macOS
-          - os: ubuntu-latest
-            platform: linux
-            artifact: HLS-Downloader-Installer-Linux.sh
-
+    runs-on: ubuntu-latest
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -33,86 +21,24 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-
-    - name: Install UPX (for compression)
-      if: matrix.platform != 'macos'
-      run: |
-        if [ "${{ matrix.platform }}" = "windows" ]; then
-          choco install upx
-        elif [ "${{ matrix.platform }}" = "linux" ]; then
-          sudo apt-get update
-          sudo apt-get install -y upx
-        fi
-      shell: bash
-
-    - name: Build installers
+    - name: Build smart installers
       run: |
         cd installer
         python build_installers.py
 
-    - name: Prepare artifacts (Windows)
-      if: matrix.platform == 'windows'
+    - name: List generated files
       run: |
-        cd installer/dist
-        # Rename the executable for Windows
-        if (Test-Path "HLS-Downloader-Installer.exe") {
-          Move-Item "HLS-Downloader-Installer.exe" "HLS-Downloader-Installer-Windows.exe"
-        } else {
-          Move-Item "HLS-Downloader-Installer" "HLS-Downloader-Installer-Windows.exe"
-        }
-      shell: powershell
+        echo "Generated installer files:"
+        ls -la installer/dist/
+        echo ""
+        echo "File sizes:"
+        du -h installer/dist/*
 
-    - name: Prepare artifacts (macOS)
-      if: matrix.platform == 'macos'
-      run: |
-        cd installer/dist
-        # Create a compressed archive of the app bundle
-        tar -czf "HLS-Downloader-Installer-macOS.tar.gz" "HLS Downloader Installer.app"
-        # Also provide the standalone executable
-        cp "HLS-Downloader-Installer" "HLS-Downloader-Installer-macOS"
-
-    - name: Prepare artifacts (Linux)
-      if: matrix.platform == 'linux'
-      run: |
-        cd installer/dist
-        # The shell script is already named correctly
-        # Just provide the standalone executable with Linux suffix
-        cp "HLS-Downloader-Installer" "HLS-Downloader-Installer-Linux"
-
-    - name: Upload Windows artifacts
-      if: matrix.platform == 'windows'
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-installer
-        path: |
-          installer/dist/HLS-Downloader-Installer-Windows.exe
-          installer/dist/HLS-Downloader-Installer-Windows.bat
-          installer/dist/README.md
-
-    - name: Upload macOS artifacts
-      if: matrix.platform == 'macos'
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-installer
-        path: |
-          installer/dist/HLS-Downloader-Installer-macOS.tar.gz
-          installer/dist/HLS-Downloader-Installer-macOS
-          installer/dist/HLS-Downloader-Installer-Linux.sh
-          installer/dist/README.md
-
-    - name: Upload Linux artifacts
-      if: matrix.platform == 'linux'
-      uses: actions/upload-artifact@v4
-      with:
-        name: linux-installer
-        path: |
-          installer/dist/HLS-Downloader-Installer-Linux.sh
-          installer/dist/HLS-Downloader-Installer-Linux
-          installer/dist/README.md
+        name: smart-installers
+        path: installer/dist/*
 
   create-release:
     needs: build-installers
@@ -121,95 +47,97 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-
-    - name: Download all artifacts
+    
+    - name: Download artifacts
       uses: actions/download-artifact@v4
+      with:
+        name: smart-installers
+        path: ./release-assets
+
+    - name: List release assets
+      run: |
+        echo "Release assets:"
+        ls -la ./release-assets/
+        echo ""
+        echo "File sizes and checksums:"
+        cd ./release-assets
+        for file in *; do
+          if [ -f "$file" ]; then
+            size=$(du -h "$file" | cut -f1)
+            sha256=$(sha256sum "$file" | cut -d' ' -f1)
+            echo "📦 $file ($size) - SHA256: $sha256"
+          fi
+        done
 
     - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./release-assets/*
+        body: |
+          # 🚀 HLS Downloader ${{ github.ref_name }} - Ultra-Simplified Smart Installers
+          
+          ## 🎉 MAJOR SIMPLIFICATION
+          
+          We've **dramatically simplified** the installation process! Instead of 9+ files, you now get just **2 smart installers** that do everything automatically.
+          
+          ### 📦 Available Installers
+          
+          #### 🪟 Windows
+          - **File**: `HLS-Downloader-Smart-Installer-Windows.bat` (~5KB)
+          - **Installation**: Simply double-click the `.bat` file
+          - **Requirements**: Windows 7+ with PowerShell
+          
+          #### 🍎 macOS & 🐧 Linux  
+          - **File**: `HLS-Downloader-Smart-Installer-Unix.sh` (~10KB)
+          - **Installation**: 
+            ```bash
+            chmod +x HLS-Downloader-Smart-Installer-Unix.sh
+            ./HLS-Downloader-Smart-Installer-Unix.sh
+            ```
+          - **Requirements**: macOS 10.12+ or Linux with bash
+          
+          ## ✨ What Each Installer Does Automatically
+          
+          1. **Downloads** portable Python (no system changes needed!)
+          2. **Downloads** latest HLS Downloader source code
+          3. **Installs** all dependencies automatically  
+          4. **Downloads** Playwright browsers
+          5. **Builds** the final application
+          6. **Creates** desktop shortcuts/app bundles
+          7. **Cleans up** all temporary files
+          8. **Leaves** only the app and browsers (~200MB total)
+          
+          ## 🎯 Key Benefits
+          
+          - **Tiny Downloads**: 5-10KB installers vs 800MB+ bundled apps
+          - **Always Latest**: Downloads the newest version automatically
+          - **No Python Required**: Installs portable Python automatically
+          - **One-Click Setup**: Everything happens automatically
+          - **Self-Contained**: Final result includes everything needed
+          - **Cross-Platform**: Smart OS detection and setup
+          
+          ## 📍 Installation Locations
+          
+          - **Windows**: `%USERPROFILE%\HLS-Downloader\`
+          - **macOS**: `~/Applications/HLS-Downloader/` + App Bundle
+          - **Linux**: `~/.local/share/HLS-Downloader/` + Desktop Entry
+          
+          ## 🆘 Troubleshooting
+          
+          If installation fails:
+          1. Check internet connection
+          2. Ensure write permissions to installation directory
+          3. On Linux: Install `curl`, `wget`, and `unzip` if missing
+          4. On macOS: Install Xcode Command Line Tools if needed
+          
+          ---
+          
+          **Total download during installation**: ~50-80MB  
+          **Final app size**: ~200MB (includes everything)  
+          **Installation time**: 2-5 minutes (depending on internet speed)
+          
+          🎉 **This is the cleanest, most efficient way to install HLS Downloader!**
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Extract tag name
-        TAG_NAME=${GITHUB_REF#refs/tags/}
-        
-        # Create release
-        gh release create "$TAG_NAME" \
-          --title "HLS Downloader $TAG_NAME" \
-          --notes "## HLS Downloader Smart Installers
-
-        **Lightweight installers (~5-10MB) that download and set up everything automatically!**
-
-        ### Why Smart Installers?
-        - Tiny Size: 5-10MB vs 800MB+ bundled apps
-        - Always Updated: Downloads latest version
-        - Smart Setup: Detects existing Python/browsers
-        - Cross-Platform: Works on Windows, macOS, and Linux
-
-        ### Download for your platform:
-
-        **Windows:**
-        - \`HLS-Downloader-Installer-Windows.exe\` - Compiled executable (recommended)
-        - \`HLS-Downloader-Installer-Windows.bat\` - Batch script
-
-        **macOS:**
-        - \`HLS-Downloader-Installer-macOS.tar.gz\` - Native app bundle
-        - \`HLS-Downloader-Installer-macOS\` - Standalone executable
-
-        **Linux:**
-        - \`HLS-Downloader-Installer-Linux.sh\` - Shell script (recommended)
-        - \`HLS-Downloader-Installer-Linux\` - Standalone executable
-
-        ### Requirements
-        - Internet connection
-        - ~200MB disk space
-        - Python 3.8+ (installer will guide you if missing)
-
-        ### Installation
-        1. Download the installer for your platform
-        2. Run it (may need admin/sudo for some operations)
-        3. Follow the prompts
-        4. Enjoy your lightweight HLS Downloader!
-
-        The installer will automatically:
-        - Check for Python and guide installation if needed
-        - Download the latest HLS Downloader code
-        - Set up a virtual environment
-        - Install all dependencies
-        - Download Chromium browser
-        - Create desktop shortcuts/launchers"
-
-    - name: Upload Release Assets
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Extract tag name
-        TAG_NAME=${GITHUB_REF#refs/tags/}
-        
-        # Upload all assets to the release
-        if [ -f "windows-installer/HLS-Downloader-Installer-Windows.exe" ]; then
-          gh release upload "$TAG_NAME" "windows-installer/HLS-Downloader-Installer-Windows.exe"
-        fi
-        
-        if [ -f "windows-installer/HLS-Downloader-Installer-Windows.bat" ]; then
-          gh release upload "$TAG_NAME" "windows-installer/HLS-Downloader-Installer-Windows.bat"
-        fi
-        
-        if [ -f "macos-installer/HLS-Downloader-Installer-macOS.tar.gz" ]; then
-          gh release upload "$TAG_NAME" "macos-installer/HLS-Downloader-Installer-macOS.tar.gz"
-        fi
-        
-        if [ -f "macos-installer/HLS-Downloader-Installer-macOS" ]; then
-          gh release upload "$TAG_NAME" "macos-installer/HLS-Downloader-Installer-macOS"
-        fi
-        
-        if [ -f "linux-installer/HLS-Downloader-Installer-Linux.sh" ]; then
-          gh release upload "$TAG_NAME" "linux-installer/HLS-Downloader-Installer-Linux.sh"
-        fi
-        
-        if [ -f "linux-installer/HLS-Downloader-Installer-Linux" ]; then
-          gh release upload "$TAG_NAME" "linux-installer/HLS-Downloader-Installer-Linux"
-        fi
-        
-        if [ -f "linux-installer/README.md" ]; then
-          gh release upload "$TAG_NAME" "linux-installer/README.md#Installation-README.md"
-        fi
