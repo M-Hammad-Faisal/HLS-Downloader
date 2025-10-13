@@ -55,8 +55,8 @@ class ReleasePreparator:
         self.log("Release directory prepared")
     
     def create_platform_bundle(self, target_platform):
-        """Create installer bundle for specific platform."""
-        self.log(f"Creating {target_platform} installer bundle...")
+        """Create standalone executable bundle for specific platform."""
+        self.log(f"Creating {target_platform} standalone executable bundle...")
         
         platform_config = self.platforms[target_platform]
         
@@ -72,35 +72,33 @@ class ReleasePreparator:
         bundle_dir = self.release_dir / bundle_name
         bundle_dir.mkdir(exist_ok=True)
         
-        # Generate installer files dynamically
-        self.create_installer_files(bundle_dir, target_platform)
+        # Build standalone executable with PyInstaller
+        self.build_executable(target_platform)
         
-        # Copy source code and assets
-        source_dirs = ["hlsdownloader", "assets"]
-        source_files = ["main.py", "requirements.txt"]
-        
-        for dir_name in source_dirs:
-            src_dir = self.current_dir / dir_name
-            if src_dir.exists():
-                shutil.copytree(src_dir, bundle_dir / dir_name)
-        
-        for file_name in source_files:
-            src = self.current_dir / file_name
-            if src.exists():
-                shutil.copy2(src, bundle_dir / file_name)
-        
-        # Copy executable if available
+        # Copy the built executable to bundle
         dist_dir = self.current_dir / "dist"
         exe_name = platform_config["executable_name"]
-        if (dist_dir / exe_name).exists():
-            if target_platform == "darwin" and exe_name.endswith(".app"):
-                shutil.copytree(dist_dir / exe_name, bundle_dir / exe_name)
-            else:
-                shutil.copy2(dist_dir / exe_name, bundle_dir / exe_name)
-            self.log(f"Included pre-built executable: {exe_name}")
         
-        # Create installation instructions
-        self.create_platform_instructions(bundle_dir, target_platform)
+        if not (dist_dir / exe_name).exists():
+            raise FileNotFoundError(f"Executable not found: {dist_dir / exe_name}")
+        
+        if target_platform == "darwin" and exe_name.endswith(".app"):
+            shutil.copytree(dist_dir / exe_name, bundle_dir / exe_name)
+        else:
+            shutil.copy2(dist_dir / exe_name, bundle_dir / exe_name)
+        
+        self.log(f"Included standalone executable: {exe_name}")
+        
+        # Copy only essential assets (no source code)
+        assets_dir = self.current_dir / "assets"
+        if assets_dir.exists():
+            shutil.copytree(assets_dir, bundle_dir / "assets")
+        
+        # Create simple launcher scripts (no Python dependencies)
+        self.create_launcher_scripts(bundle_dir, target_platform, exe_name)
+        
+        # Create installation instructions for standalone app
+        self.create_standalone_instructions(bundle_dir, target_platform, exe_name)
         
         # Create archive
         archive_name = bundle_name + platform_config["bundle_ext"]
@@ -125,246 +123,158 @@ class ReleasePreparator:
         
         return archive_path
     
-    def create_installer_files(self, bundle_dir, platform):
-        """Generate installer files for the specified platform."""
+    def build_executable(self, target_platform):
+        """Build standalone executable using PyInstaller."""
+        self.log(f"Building standalone executable for {target_platform}...")
         
-        # Create installer.py (universal Python installer)
-        installer_py_content = '''#!/usr/bin/env python3
-"""
-HLS Downloader Installer
-Cross-platform installer for HLS Downloader application.
-"""
-
-import os
-import sys
-import shutil
-import subprocess
-from pathlib import Path
-
-class HLSDownloaderInstaller:
-    def __init__(self):
-        self.app_name = "HLS Downloader"
-        self.current_dir = Path(__file__).parent
+        platform_config = self.platforms[target_platform]
         
-    def install(self):
-        """Main installation process."""
-        print(f"Installing {self.app_name}...")
+        # Clean previous builds
+        dist_dir = self.current_dir / "dist"
+        build_dir = self.current_dir / "build"
+        if dist_dir.exists():
+            shutil.rmtree(dist_dir)
+        if build_dir.exists():
+            shutil.rmtree(build_dir)
+        
+        # PyInstaller command
+        cmd = [
+            sys.executable, "-m", "PyInstaller",
+            "--onedir",  # Create a one-folder bundle
+            "--windowed" if target_platform in ["windows", "darwin"] else "--console",
+            "--name", platform_config["executable_name"].replace(".exe", "").replace(".app", ""),
+            "--add-data", f"{self.current_dir / 'assets'}:assets",
+            "--hidden-import", "hlsdownloader",
+            "--hidden-import", "hlsdownloader.gui",
+            "--hidden-import", "hlsdownloader.cli",
+            "--hidden-import", "hlsdownloader.hls",
+            "--hidden-import", "hlsdownloader.capture",
+            "--hidden-import", "hlsdownloader.http_dl",
+            "--hidden-import", "hlsdownloader.utils",
+            "--clean",
+            str(self.current_dir / "main.py")
+        ]
+        
+        # Add icon if available
+        if target_platform == "windows":
+            icon_path = self.current_dir / "assets" / "icon.ico"
+        elif target_platform == "darwin":
+            icon_path = self.current_dir / "assets" / "icon.icns"
+        else:  # linux
+            icon_path = None
+            
+        if icon_path and icon_path.exists():
+            cmd.extend(["--icon", str(icon_path)])
+        
+        # Add platform-specific options
+        if target_platform == "darwin":
+            cmd.extend(["--osx-bundle-identifier", "com.hlsdownloader.app"])
         
         try:
-            # Check Python version
-            if sys.version_info < (3, 7):
-                print("Error: Python 3.7 or higher is required.")
-                return False
-                
-            # Install dependencies with PEP 668 handling
-            print("Installing dependencies...")
-            self._install_dependencies()
-            
-            # Install Playwright browsers
-            print("Installing Playwright browsers...")
-            self._install_playwright()
-            
-            print(f"\\n{self.app_name} installed successfully!")
-            print("\\nTo run the application:")
-            print("  GUI: python main.py")
-            print("  CLI: python -m hlsdownloader.cli --help")
-            
-            return True
-            
+            subprocess.run(cmd, check=True, cwd=self.current_dir)
+            self.log(f"Successfully built executable for {target_platform}")
         except subprocess.CalledProcessError as e:
-            print(f"Installation failed: {e}")
-            return False
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            return False
+            raise RuntimeError(f"Failed to build executable: {e}")
     
-    def _install_dependencies(self):
-        """Install dependencies with PEP 668 handling."""
-        pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+    def create_launcher_scripts(self, bundle_dir, platform, exe_name):
+        """Create simple launcher scripts for standalone executables."""
         
-        try:
-            # Try normal pip install first
-            subprocess.check_call(pip_cmd)
-        except subprocess.CalledProcessError:
-            # If it fails, try with --user flag (PEP 668 workaround)
-            print("Standard installation failed, trying user installation...")
-            pip_cmd.append("--user")
-            try:
-                subprocess.check_call(pip_cmd)
-            except subprocess.CalledProcessError:
-                # If --user also fails, try --break-system-packages as last resort
-                print("User installation failed, trying with --break-system-packages...")
-                pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--break-system-packages"]
-                subprocess.check_call(pip_cmd)
-    
-    def _install_playwright(self):
-        """Install Playwright browsers with error handling."""
-        try:
-            subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
-        except subprocess.CalledProcessError:
-            print("Warning: Playwright browser installation failed. You may need to install manually:")
-            print("  python -m playwright install chromium")
-
-if __name__ == "__main__":
-    installer = HLSDownloaderInstaller()
-    success = installer.install()
-    sys.exit(0 if success else 1)
-'''
-        
-        # Write installer.py
-        with open(bundle_dir / "installer.py", "w") as f:
-            f.write(installer_py_content)
-        
-        # Make installer.py executable on Unix systems
-        if platform in ["darwin", "linux"]:
-            os.chmod(bundle_dir / "installer.py", 0o755)
-        
-        # Create platform-specific install scripts
         if platform == "windows":
-            install_bat_content = '''@echo off
-echo Installing HLS Downloader...
-echo.
-
-REM Check if Python is installed
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo Error: Python is not installed or not in PATH.
-    echo Please install Python 3.7+ from https://python.org
-    pause
-    exit /b 1
-)
-
-REM Run the Python installer
-python installer.py
-
-echo.
-echo Installation complete!
-pause
+            launcher_content = f'''@echo off
+echo Starting HLS Downloader...
+start "" "{exe_name}"
 '''
-            with open(bundle_dir / "install.bat", "w") as f:
-                f.write(install_bat_content)
+            with open(bundle_dir / "Launch_HLS_Downloader.bat", "w") as f:
+                f.write(launcher_content)
                 
         elif platform in ["darwin", "linux"]:
-            install_sh_content = '''#!/bin/bash
-echo "Installing HLS Downloader..."
-echo
-
-# Check if Python 3 is installed
-if ! command -v python3 &> /dev/null; then
-    echo "Error: Python 3 is not installed."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "Please install Python 3 from https://python.org or use Homebrew:"
-        echo "  brew install python"
-    else
-        echo "Please install Python 3 using your package manager:"
-        echo "  Ubuntu/Debian: sudo apt install python3 python3-pip"
-        echo "  CentOS/RHEL: sudo yum install python3 python3-pip"
-        echo "  Fedora: sudo dnf install python3 python3-pip"
-    fi
-    exit 1
-fi
-
-# macOS-specific PEP 668 guidance
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "Note: On macOS, if you encounter 'externally-managed-environment' errors,"
-    echo "the installer will automatically try alternative installation methods."
-    echo
-fi
-
-# Run the Python installer
-python3 installer.py
-
-echo
-echo "Installation complete!"
-echo
-echo "To run the application:"
-echo "  GUI: python3 main.py"
-echo "  CLI: python3 -m hlsdownloader.cli --help"
+            launcher_content = f'''#!/bin/bash
+echo "Starting HLS Downloader..."
+cd "$(dirname "$0")"
+./{exe_name}
 '''
-            with open(bundle_dir / "install.sh", "w") as f:
-                f.write(install_sh_content)
-            
-            # Make install.sh executable
-            os.chmod(bundle_dir / "install.sh", 0o755)
-
-    def create_platform_instructions(self, bundle_dir, platform):
-        """Create platform-specific installation instructions."""
+            launcher_path = bundle_dir / "Launch_HLS_Downloader.sh"
+            with open(launcher_path, "w") as f:
+                f.write(launcher_content)
+            os.chmod(launcher_path, 0o755)
+    
+    def create_standalone_instructions(self, bundle_dir, platform, exe_name):
+        """Create installation instructions for standalone executables."""
+        
         if platform == "windows":
-            instructions = """# Windows Installation Instructions
+            instructions = f"""# Windows Installation Instructions
 
 ## Quick Start
-1. Extract this ZIP file to a folder
-2. Double-click `install.bat`
-3. Follow the installation prompts
-4. Launch from desktop shortcut
+1. Extract this ZIP file to any folder
+2. Double-click `{exe_name}` to run HLS Downloader
+3. Or use `Launch_HLS_Downloader.bat` for easier access
 
-## Requirements
-- Windows 7/8/10/11
-- 200 MB free disk space
-- Internet connection (for initial setup)
+## Features
+- **No Python Required**: Standalone executable
+- **No Installation Needed**: Just extract and run
+- **Portable**: Can be run from any folder or USB drive
 
-## Manual Installation
-If the automatic installer doesn't work:
-1. Install Python 3.8+ from python.org
-2. Open Command Prompt in this folder
-3. Run: `python installer.py`
+## System Requirements
+- Windows 7 or later
+- 100 MB free disk space
+- Internet connection (for downloading videos)
 
 ## Troubleshooting
-- Run as Administrator if installation fails
-- Disable antivirus temporarily if blocked
-- Check Windows Defender exclusions
+- If Windows blocks the app, click "More info" → "Run anyway"
+- Allow app in Windows Defender if prompted
+- Run as Administrator if you encounter permission issues
 """
         elif platform == "darwin":
-            instructions = """# macOS Installation Instructions
+            instructions = f"""# macOS Installation Instructions
 
 ## Quick Start
-1. Extract this archive
-2. Open Terminal in the extracted folder
-3. Run: `./install.sh`
-4. Launch from Applications folder
+1. Extract this archive to Applications folder (or any location)
+2. Double-click `{exe_name}` to run HLS Downloader
+3. Or use `Launch_HLS_Downloader.sh` from Terminal
 
-## Requirements
+## Features
+- **No Python Required**: Standalone app bundle
+- **No Installation Needed**: Just extract and run
+- **Native macOS App**: Integrates with macOS properly
+
+## System Requirements
 - macOS 10.14 (Mojave) or later
-- 200 MB free disk space
-- Internet connection (for initial setup)
-
-## Manual Installation
-1. Install Python 3.8+ (if not already installed)
-2. Open Terminal in this folder
-3. Run: `python3 installer.py`
+- 100 MB free disk space
+- Internet connection (for downloading videos)
 
 ## Troubleshooting
-- Allow app in System Preferences > Security & Privacy
-- Grant Terminal permissions if prompted
-- Use `chmod +x install.sh` if permission denied
+- If macOS blocks the app: System Preferences → Security & Privacy → "Open Anyway"
+- Grant permissions when prompted (Downloads folder access, etc.)
+- For Terminal use: `chmod +x Launch_HLS_Downloader.sh`
 """
         else:  # linux
-            instructions = """# Linux Installation Instructions
+            instructions = f"""# Linux Installation Instructions
 
 ## Quick Start
-1. Extract this archive
-2. Open terminal in the extracted folder
-3. Run: `./install.sh`
-4. Launch from desktop shortcut
+1. Extract this archive to any folder
+2. Run: `./{exe_name}` from terminal
+3. Or use `Launch_HLS_Downloader.sh` for easier access
 
-## Requirements
+## Features
+- **No Python Required**: Standalone executable
+- **No Installation Needed**: Just extract and run
+- **Portable**: Can be run from any folder
+
+## System Requirements
 - Ubuntu 18.04+ / Debian 10+ / CentOS 7+ / Fedora 30+
-- Python 3.8+ (usually pre-installed)
-- 200 MB free disk space
-- Internet connection (for initial setup)
-
-## Manual Installation
-1. Ensure Python 3.8+ is installed: `python3 --version`
-2. Run: `python3 installer.py`
+- 100 MB free disk space
+- Internet connection (for downloading videos)
 
 ## Troubleshooting
-- Install Python: `sudo apt install python3 python3-pip` (Ubuntu/Debian)
-- Make executable: `chmod +x install.sh`
-- Check dependencies: `python3 -m pip --version`
+- Make executable: `chmod +x {exe_name}`
+- Install missing libraries if needed: `sudo apt install libxcb1`
+- For GUI issues, install: `sudo apt install libqt5gui5`
 """
         
-        with open(bundle_dir / f"INSTALL_{platform.upper()}.md", 'w') as f:
+        with open(bundle_dir / f"README_{platform.upper()}.md", 'w') as f:
             f.write(instructions)
+    
+
     
     def create_release_notes(self):
         """Create comprehensive release notes."""
@@ -572,11 +482,16 @@ Found a bug? [Create an issue](https://github.com/yourusername/VideoDownloader/i
             # Clean release directory
             self.clean_release_dir()
             
-            # Generate platform bundles
+            # Generate platform bundle for current platform only
+            # PyInstaller can't cross-compile, so we build for current platform
             created_bundles = []
-            for platform in self.platforms.keys():
-                bundle_path = self.create_platform_bundle(platform)
-                created_bundles.append(bundle_path)
+            current_platform = self.current_platform
+            if current_platform not in self.platforms:
+                raise ValueError(f"Unsupported platform: {current_platform}")
+            
+            self.log(f"Building for current platform: {current_platform}")
+            bundle_path = self.create_platform_bundle(current_platform)
+            created_bundles.append(bundle_path)
             
             # Create documentation
             release_notes = self.create_release_notes()
