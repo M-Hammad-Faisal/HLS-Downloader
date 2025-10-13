@@ -76,16 +76,38 @@ class ReleasePreparator:
         self.build_executable(target_platform)
         
         # Copy the built executable to bundle
-        dist_dir = self.current_dir / "dist"
+        dist_base = self.current_dir / "dist"
         exe_name = platform_config["executable_name"]
+        app_name = exe_name.replace(".exe", "").replace(".app", "")
         
-        if not (dist_dir / exe_name).exists():
-            raise FileNotFoundError(f"Executable not found: {dist_dir / exe_name}")
+        # Find the executable - PyInstaller creates a subdirectory
+        possible_names = [
+            app_name,  # Original name with spaces
+            app_name.replace(" ", "_"),  # Spaces to underscores
+            app_name.replace(" ", "-"),  # Spaces to hyphens
+            app_name.replace(" ", ""),   # Remove spaces entirely
+        ]
+        
+        exe_path = None
+        for name in possible_names:
+            candidate = dist_base / name / exe_name
+            if candidate.exists():
+                exe_path = candidate
+                break
+        
+        if exe_path is None:
+            # Try direct path as fallback
+            direct_path = dist_base / exe_name
+            if direct_path.exists():
+                exe_path = direct_path
+            else:
+                available_dirs = [d.name for d in dist_base.iterdir() if d.is_dir()] if dist_base.exists() else []
+                raise FileNotFoundError(f"Executable not found. Tried: {[str(dist_base / name / exe_name) for name in possible_names]}. Available dirs: {available_dirs}")
         
         if target_platform == "darwin" and exe_name.endswith(".app"):
-            shutil.copytree(dist_dir / exe_name, bundle_dir / exe_name)
+            shutil.copytree(exe_path, bundle_dir / exe_name)
         else:
-            shutil.copy2(dist_dir / exe_name, bundle_dir / exe_name)
+            shutil.copy2(exe_path, bundle_dir / exe_name)
         
         self.log(f"Included standalone executable: {exe_name}")
         
@@ -229,10 +251,28 @@ class ReleasePreparator:
         platform_config = self.platforms[target_platform]
         app_name = platform_config["executable_name"].replace(".exe", "").replace(".app", "")
         
-        # Find the distribution directory
-        dist_dir = self.current_dir / "dist" / app_name
-        if not dist_dir.exists():
-            raise RuntimeError(f"Distribution directory not found: {dist_dir}")
+        # Find the distribution directory - try multiple possible names
+        dist_base = self.current_dir / "dist"
+        possible_names = [
+            app_name,  # Original name with spaces
+            app_name.replace(" ", "_"),  # Spaces to underscores
+            app_name.replace(" ", "-"),  # Spaces to hyphens
+            app_name.replace(" ", ""),   # Remove spaces entirely
+        ]
+        
+        dist_dir = None
+        for name in possible_names:
+            candidate = dist_base / name
+            if candidate.exists() and candidate.is_dir():
+                dist_dir = candidate
+                break
+        
+        if dist_dir is None:
+            # List available directories for debugging
+            available_dirs = [d.name for d in dist_base.iterdir() if d.is_dir()] if dist_base.exists() else []
+            raise RuntimeError(f"Distribution directory not found. Tried: {possible_names}. Available: {available_dirs}")
+        
+        self.log(f"Found distribution directory: {dist_dir}")
         
         # Copy pw-browsers directory
         src_browsers = self.current_dir / "pw-browsers"
