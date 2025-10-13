@@ -28,6 +28,10 @@ jobs:
     
     runs-on: ${{ matrix.os }}
     
+    defaults:
+      run:
+        shell: bash
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -86,12 +90,18 @@ jobs:
         fi
         
         # Copy Playwright browsers to the dist folder
-        if [ -d "$HOME/.cache/ms-playwright" ]; then
-          cp -r "$HOME/.cache/ms-playwright" "dist/HLS Downloader/pw-browsers"
-        elif [ -d "$USERPROFILE/AppData/Local/ms-playwright" ]; then
-          cp -r "$USERPROFILE/AppData/Local/ms-playwright" "dist/HLS Downloader/pw-browsers"
-        elif [ -d "$HOME/Library/Caches/ms-playwright" ]; then
-          cp -r "$HOME/Library/Caches/ms-playwright" "dist/HLS Downloader/pw-browsers"
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          if [ -d "$USERPROFILE/AppData/Local/ms-playwright" ]; then
+            cp -r "$USERPROFILE/AppData/Local/ms-playwright" "dist/HLS Downloader/pw-browsers"
+          fi
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          if [ -d "$HOME/Library/Caches/ms-playwright" ]; then
+            cp -r "$HOME/Library/Caches/ms-playwright" "dist/HLS Downloader/pw-browsers"
+          fi
+        else
+          if [ -d "$HOME/.cache/ms-playwright" ]; then
+            cp -r "$HOME/.cache/ms-playwright" "dist/HLS Downloader/pw-browsers"
+          fi
         fi
         
         # Create archive
