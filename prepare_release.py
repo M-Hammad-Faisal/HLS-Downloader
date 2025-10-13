@@ -156,13 +156,13 @@ class HLSDownloaderInstaller:
                 print("Error: Python 3.7 or higher is required.")
                 return False
                 
-            # Install dependencies
+            # Install dependencies with PEP 668 handling
             print("Installing dependencies...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+            self._install_dependencies()
             
             # Install Playwright browsers
             print("Installing Playwright browsers...")
-            subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+            self._install_playwright()
             
             print(f"\\n{self.app_name} installed successfully!")
             print("\\nTo run the application:")
@@ -177,6 +177,33 @@ class HLSDownloaderInstaller:
         except Exception as e:
             print(f"Unexpected error: {e}")
             return False
+    
+    def _install_dependencies(self):
+        """Install dependencies with PEP 668 handling."""
+        pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+        
+        try:
+            # Try normal pip install first
+            subprocess.check_call(pip_cmd)
+        except subprocess.CalledProcessError:
+            # If it fails, try with --user flag (PEP 668 workaround)
+            print("Standard installation failed, trying user installation...")
+            pip_cmd.append("--user")
+            try:
+                subprocess.check_call(pip_cmd)
+            except subprocess.CalledProcessError:
+                # If --user also fails, try --break-system-packages as last resort
+                print("User installation failed, trying with --break-system-packages...")
+                pip_cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--break-system-packages"]
+                subprocess.check_call(pip_cmd)
+    
+    def _install_playwright(self):
+        """Install Playwright browsers with error handling."""
+        try:
+            subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+        except subprocess.CalledProcessError:
+            print("Warning: Playwright browser installation failed. You may need to install manually:")
+            print("  python -m playwright install chromium")
 
 if __name__ == "__main__":
     installer = HLSDownloaderInstaller()
@@ -235,6 +262,13 @@ if ! command -v python3 &> /dev/null; then
         echo "  Fedora: sudo dnf install python3 python3-pip"
     fi
     exit 1
+fi
+
+# macOS-specific PEP 668 guidance
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "Note: On macOS, if you encounter 'externally-managed-environment' errors,"
+    echo "the installer will automatically try alternative installation methods."
+    echo
 fi
 
 # Run the Python installer
