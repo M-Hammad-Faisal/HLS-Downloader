@@ -76,9 +76,8 @@ jobs:
       if: matrix.platform == 'linux'
       run: |
         cd installer/dist
-        # Copy the shell script
-        cp "HLS-Downloader-Installer-Linux.sh" "HLS-Downloader-Installer-Linux.sh"
-        # Also provide the standalone executable
+        # The shell script is already named correctly
+        # Just provide the standalone executable with Linux suffix
         cp "HLS-Downloader-Installer" "HLS-Downloader-Installer-Linux"
 
     - name: Upload Windows artifacts
