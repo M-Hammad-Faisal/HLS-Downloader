@@ -1,0 +1,6 @@
+# SHA256 Checksums for HLS-Video-Downloader v1.0.0
+# Generated on 2025-10-13 10:27:55 UTC
+
+74a3ae0f8370980f1414e611193f46a4974c614317ef3bb3cd25b2d2031882d3  HLS-Video-Downloader-1.0.0-windows-x64.zip
+6b5dca7ca9730ab766af269043ffcc349cafb7ceee30c98b9ceab2d1af149eb5  HLS-Video-Downloader-1.0.0-darwin-universal.tar.gz
+f49328e99e124f9e47f7b9aaf3c39b8a5ebdd3645350fb18a661864cd74e7d10  HLS-Video-Downloader-1.0.0-linux-x64.tar.gz
