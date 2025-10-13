@@ -50,10 +50,32 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential
+        sudo apt-get install -y \
+          build-essential \
+          qt5-qmake \
+          qtbase5-dev \
+          qtbase5-dev-tools \
+          libqt5gui5 \
+          libqt5core5a \
+          libqt5widgets5 \
+          python3-pyqt5 \
+          python3-pyqt5.qtwidgets \
+          xvfb \
+          libxkbcommon-x11-0 \
+          libxcb-icccm4 \
+          libxcb-image0 \
+          libxcb-keysyms1 \
+          libxcb-randr0 \
+          libxcb-render-util0 \
+          libxcb-xinerama0 \
+          libxcb-xfixes0
 
     - name: Generate release bundles
-      run: python prepare_release.py
+      run: |
+        export QT_QPA_PLATFORM=offscreen
+        export DISPLAY=:99
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        python prepare_release.py
 
     - name: Upload release assets
       uses: actions/upload-artifact@v4
