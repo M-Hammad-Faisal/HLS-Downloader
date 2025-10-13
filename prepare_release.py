@@ -72,18 +72,8 @@ class ReleasePreparator:
         bundle_dir = self.release_dir / bundle_name
         bundle_dir.mkdir(exist_ok=True)
         
-        # Copy installer files
-        installer_files = [
-            "installer.py",
-            "install.bat",
-            "install.sh", 
-            "INSTALLER_README.md"
-        ]
-        
-        for file_name in installer_files:
-            src = self.current_dir / file_name
-            if src.exists():
-                shutil.copy2(src, bundle_dir / file_name)
+        # Generate installer files dynamically
+        self.create_installer_files(bundle_dir, target_platform)
         
         # Copy source code and assets
         source_dirs = ["hlsdownloader", "assets"]
@@ -135,6 +125,134 @@ class ReleasePreparator:
         
         return archive_path
     
+    def create_installer_files(self, bundle_dir, platform):
+        """Generate installer files for the specified platform."""
+        
+        # Create installer.py (universal Python installer)
+        installer_py_content = '''#!/usr/bin/env python3
+"""
+HLS Downloader Installer
+Cross-platform installer for HLS Downloader application.
+"""
+
+import os
+import sys
+import shutil
+import subprocess
+from pathlib import Path
+
+class HLSDownloaderInstaller:
+    def __init__(self):
+        self.app_name = "HLS Downloader"
+        self.current_dir = Path(__file__).parent
+        
+    def install(self):
+        """Main installation process."""
+        print(f"Installing {self.app_name}...")
+        
+        try:
+            # Check Python version
+            if sys.version_info < (3, 7):
+                print("Error: Python 3.7 or higher is required.")
+                return False
+                
+            # Install dependencies
+            print("Installing dependencies...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+            
+            # Install Playwright browsers
+            print("Installing Playwright browsers...")
+            subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+            
+            print(f"\\n{self.app_name} installed successfully!")
+            print("\\nTo run the application:")
+            print("  GUI: python main.py")
+            print("  CLI: python -m hlsdownloader.cli --help")
+            
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print(f"Installation failed: {e}")
+            return False
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            return False
+
+if __name__ == "__main__":
+    installer = HLSDownloaderInstaller()
+    success = installer.install()
+    sys.exit(0 if success else 1)
+'''
+        
+        # Write installer.py
+        with open(bundle_dir / "installer.py", "w") as f:
+            f.write(installer_py_content)
+        
+        # Make installer.py executable on Unix systems
+        if platform in ["darwin", "linux"]:
+            os.chmod(bundle_dir / "installer.py", 0o755)
+        
+        # Create platform-specific install scripts
+        if platform == "windows":
+            install_bat_content = '''@echo off
+echo Installing HLS Downloader...
+echo.
+
+REM Check if Python is installed
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo Error: Python is not installed or not in PATH.
+    echo Please install Python 3.7+ from https://python.org
+    pause
+    exit /b 1
+)
+
+REM Run the Python installer
+python installer.py
+
+echo.
+echo Installation complete!
+pause
+'''
+            with open(bundle_dir / "install.bat", "w") as f:
+                f.write(install_bat_content)
+                
+        elif platform in ["darwin", "linux"]:
+            install_sh_content = '''#!/bin/bash
+echo "Installing HLS Downloader..."
+echo
+
+# Check if Python 3 is installed
+if ! command -v python3 &> /dev/null; then
+    echo "Error: Python 3 is not installed."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "Please install Python 3 from https://python.org or use Homebrew:"
+        echo "  brew install python"
+    else
+        echo "Please install Python 3 using your package manager:"
+        echo "  Ubuntu/Debian: sudo apt install python3 python3-pip"
+        echo "  CentOS/RHEL: sudo yum install python3 python3-pip"
+        echo "  Fedora: sudo dnf install python3 python3-pip"
+    fi
+    exit 1
+fi
+
+# Run the Python installer
+python3 installer.py
+
+echo
+echo "Installation complete!"
+echo
+echo "To run the application:"
+echo "  GUI: python3 main.py"
+echo "  CLI: python3 -m hlsdownloader.cli --help"
+'''
+            with open(bundle_dir / "install.sh", "w") as f:
+                f.write(install_sh_content)
+            
+            # Make install.sh executable
+            os.chmod(bundle_dir / "install.sh", 0o755)
+
     def create_platform_instructions(self, bundle_dir, platform):
         """Create platform-specific installation instructions."""
         if platform == "windows":
