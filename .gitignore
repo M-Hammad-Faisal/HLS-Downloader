@@ -18,6 +18,9 @@ __pycache__/
 # Build/Dist
 build/
 dist/
+build_bundle/
+dist_bundle/
+release_assets/
 
 # Local env/config  
 .env
